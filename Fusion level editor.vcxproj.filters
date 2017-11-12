@@ -15,24 +15,24 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="stdafx.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="targetver.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Fusion level editor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="os.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="os_windows.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="stdafx.cpp">
+    <ClCompile Include="Fusion level editor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Fusion level editor.cpp">
+    <ClCompile Include="os_windows.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
