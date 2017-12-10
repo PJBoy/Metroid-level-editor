@@ -1,5 +1,7 @@
 #pragma once
 
+#include "global.h"
+
 class Os
 {
 public:

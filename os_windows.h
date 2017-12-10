@@ -2,6 +2,8 @@
 
 #include "os.h"
 
+#include "global.h"
+
 #define OEMRESOURCE
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -16,10 +18,6 @@ class Windows : public Os
     // Variables //
     HINSTANCE instance; // Identifies the module (the executable)
     HACCEL accelerators;
-
-    // Callbacks //
-    static INT_PTR CALLBACK about(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
-    static LRESULT CALLBACK windowPrecedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 
     // Functions //
     void registerClass();
