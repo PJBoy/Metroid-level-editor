@@ -8,21 +8,23 @@
 #include "os_windows.h"
 #include "resource.h"
 
-#include "debug.h"
 #include "global.h"
     
 #include <commdlg.h>
 
 #include <codecvt>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <ios>
 #include <locale>
 #include <memory>
 #include <stdexcept>
-#include <string>
 #include <type_traits>
 
-std::string toString(const std::wstring& from)
+Windows* Windows::p_windows;
+
+std::string toString(const std::wstring& from) noexcept
 {
     // TODO: wstring_convert et al are deprecated as of C++17
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
@@ -34,9 +36,9 @@ class WindowsError : public std::runtime_error
     // GetLastError reference: https://msdn.microsoft.com/en-gb/library/windows/desktop/ms679360
 
 protected:
-    // TODO: can I call FormatMessaageA to avoid the conversion to ASCII?
     // FormatMessage reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms679351
     static std::wstring getErrorMessage(unsigned long errorId)
+    try
     {
         const unsigned long flags(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS);
         const void* const source{};
@@ -50,6 +52,7 @@ protected:
         LocalFree(formattedMessage);
         return ret;
     }
+    LOG_RETHROW
 
     // TODO: add stack trace
     // https://msdn.microsoft.com/en-us/library/windows/desktop/bb204633
@@ -104,7 +107,7 @@ public:
 };
 
 template<typename T, std::enable_if_t<std::is_enum_v<T>>* = nullptr>
-constexpr auto toInt(T v)
+constexpr auto toInt(T v) noexcept
 {
     return static_cast<std::underlying_type_t<T>>(v);
 }
@@ -129,7 +132,7 @@ namespace Menu
         isLastItem = 0x80
     };
     
-    constexpr ResInfo operator|(ResInfo lhs, ResInfo rhs)
+    constexpr ResInfo operator|(ResInfo lhs, ResInfo rhs) noexcept
     {
         return ResInfo(toInt(lhs) | toInt(rhs));
     }
@@ -152,7 +155,7 @@ namespace Menu
         unsigned short resInfo{};
         wchar_t text[n_text]{};
         
-        constexpr Item(Id menuId, const wchar_t(&text_in)[n_text], ResInfo resInfo = {})
+        constexpr Item(Id menuId, const wchar_t(&text_in)[n_text], ResInfo resInfo = {}) noexcept
             : menuId(toInt(menuId)), resInfo(toInt(resInfo))
         {
             for (size_t i(0); i < n_text; ++i)
@@ -162,7 +165,7 @@ namespace Menu
 
     // Until MSVS gets class template parameter deduction
     template<size_t n_text>
-    constexpr auto makeItem(Id menuId, const wchar_t(&text)[n_text], ResInfo resInfo = {})
+    constexpr auto makeItem(Id menuId, const wchar_t(&text)[n_text], ResInfo resInfo = {}) noexcept
     {
         return Item<n_text>(menuId, text, resInfo);
     }
@@ -173,14 +176,14 @@ namespace Menu
         Item<n_text> item;
         unsigned long helpId{};
         
-        constexpr Submenu(Id menuId, const wchar_t(&text)[n_text], ResInfo resInfo = {})
+        constexpr Submenu(Id menuId, const wchar_t(&text)[n_text], ResInfo resInfo = {}) noexcept
             : item(menuId, text, resInfo | ResInfo::isSubmenu)
         {}
     };
 
     // Until MSVS gets class template parameter deduction
     template<size_t n_text>
-    constexpr auto makeSubmenu(Id menuId, const wchar_t(&text)[n_text], ResInfo resInfo = {})
+    constexpr auto makeSubmenu(Id menuId, const wchar_t(&text)[n_text], ResInfo resInfo = {}) noexcept
     {
         return Submenu<n_text>(menuId, text, resInfo);
     }
@@ -258,7 +261,7 @@ try
 }
 catch (const std::exception& e)
 {
-    DebugFile("debug_aboutPrecedure_error.txt") << e.what() << '\n';
+    DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
     return true;
 }
 
@@ -292,6 +295,126 @@ try
         default:
             throw WindowsError("Unrecognised "s + (isAccelerator ? "accelerator"s : "menu"s) + " command identifier: "s + std::to_string(id));
 
+        case Menu::menu.open.menuId:
+        {
+            // GetOpenFileName reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646927
+            // CommDlgExtendedError: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646916
+
+            // Grabbed this from old code. TODO: docs say this is supersceded by 'Common Item Dialog'
+
+            // Note that the initial directory is given the first time by filename or initialDirectory (in that order),
+            // successive times are given by the previously chosen directory if initialDirectory hasn't changed (otherwise the above);
+            // otherwise, the current directory is used if it has any files matching the default filter, otherwise the user' home folder or the desktop
+
+            // TODO: use OFN_ENABLEHOOK | OFN_ENABLEINCLUDENOTIFY with a hook function to list only those files whose ROM header is supported
+            // Note that if a hooking function is specified, OFN_ENABLESIZING | OFN_EXPLORER should also be specified
+
+            wchar_t filepath[0x100];
+            filepath[0] = L'\0';
+
+            const DWORD structSize(sizeof(OPENFILENAME));
+            const HWND owner(window);
+            const HINSTANCE instance{};
+            const wchar_t* const filter
+            (
+                L"GBA ROM files\0*.abg;*.gba;\0"
+                L"All files\0*\0"
+            );
+
+            // Optional buffer for user-writable filter
+            wchar_t* const customFilter{};
+            const DWORD n_customFilter{};
+
+            // Optionally specify the index of the default filter
+            const DWORD filterIndex{};
+
+            wchar_t* const p_filepath(filepath);
+            DWORD n_filepath(DWORD(std::size(filepath)));
+
+            // Optional buffer for a copy of the filename.extension component
+            wchar_t* const filename{};
+            const DWORD n_filename{};
+
+            // Optional initial directory
+            wchar_t* const initialDirectory{};
+
+            // Optional title of window (default: "Open")
+            wchar_t* const title{};
+
+            const DWORD flags(OFN_FILEMUSTEXIST);
+
+            // Will contain the index of the first character of the filename within filepath
+            const WORD i_filename{};
+
+            // Will contain the index of the first character of the file extension within filepath or 0 if there is no extension
+            const WORD i_fileExtension{};
+
+            // Optional extension to add to filepath if it doesn't already have one (three characters max)
+            const wchar_t* const defaultExtension{};
+
+            // Arbitrary custom data for the hook function, which receives the OPENFILENAME structure via WM_INITDIALOG
+            const LPARAM customData{};
+
+            // Optional pointer to hook function, requires OFN_ENABLEHOOK
+            const LPOFNHOOKPROC hook{};
+
+            // For loading a resource dialog, requires OFN_ENABLETEMPLATE
+            wchar_t* const templateName(nullptr);
+
+            void* const reserved_0{};
+            const DWORD reserved_1{};
+
+            // TODO: set to OFN_EX_NOPLACESBAR to hide the places sidebar based on a configuration file
+            const DWORD flagsEx{};
+
+            OPENFILENAME ofn
+            {
+                structSize,
+                owner,
+                instance,
+                filter,
+                customFilter,
+                n_customFilter,
+                filterIndex,
+                p_filepath,
+                n_filepath,
+                filename,
+                n_filename,
+                initialDirectory,
+                title,
+                flags,
+                i_filename,
+                i_fileExtension,
+                defaultExtension,
+                customData,
+                hook,
+                templateName,
+                reserved_0,
+                reserved_1,
+                flagsEx
+            };
+            if (!GetOpenFileName(&ofn))
+            {
+                const DWORD error(CommDlgExtendedError());
+                if (error)
+                    throw WindowsError(error);
+
+                // Cancelled
+                break;
+            }
+
+            try
+            {
+                Windows::p_windows->config.addRecentFile(filepath);
+                Windows::p_windows->config.save();
+            }
+            catch (const std::exception& e)
+            {
+                DebugFile(DebugFile::error) << LOG_INFO "Failed to add and save file to config: "s << e.what() << '\n';
+            }
+            break;
+        }
+
         case Menu::menu.about.menuId:
         {
             // DialogBox reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645452
@@ -320,6 +443,14 @@ try
     case WM_DESTROY:
     {
         // PostQuitMessage reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644945
+        try
+        {
+            //Windows::p_windows->config.save();
+        }
+        catch (const std::exception& e)
+        {
+            DebugFile(DebugFile::error) << LOG_INFO << "Failed to save config after opening file: "s << e.what() << '\n';
+        }
         PostQuitMessage(EXIT_SUCCESS);
         break;
     }
@@ -327,6 +458,12 @@ try
     // WM_INITMENUPOPUP reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646347
     case WM_INITMENUPOPUP:
     {
+        // MENUITEMINFO reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647578
+        // GetMenuItemInfo reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647980
+        // InsertMenuItem reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647988
+        // DeleteMenu reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647629
+        // GetItemMenuCount reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647978
+
         const HMENU menu(reinterpret_cast<HMENU>(wParam));
         const unsigned superMenuIndex(LOWORD(lParam));
         const bool isWindowMenu(HIWORD(lParam));
@@ -334,26 +471,31 @@ try
         if (isWindowMenu)
             return defaultHandler();
 
-        // MENUITEMINFO reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647578
-        // GetMenuItemInfo reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647980
-        // InsertMenuItem reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647988
-
-        DebugFile("debug.txt") << menu << '\n';
         MENUITEMINFO recentSubmenuInfo{};
         recentSubmenuInfo.cbSize = sizeof(recentSubmenuInfo);
         recentSubmenuInfo.fMask = MIIM_SUBMENU;
         if (!GetMenuItemInfo(GetMenu(window), Menu::menu.recent.item.menuId, MF_BYCOMMAND, &recentSubmenuInfo))
-            throw WindowsError("Failed to get recent submenu item info");
+            throw WindowsError(LOG_INFO "Failed to get recent submenu item info"s);
 
         if (menu == recentSubmenuInfo.hSubMenu)
         {
+            int n_menuItems(GetMenuItemCount(menu));
+            if (n_menuItems == -1)
+                throw WindowsError(LOG_INFO "Failed to get number of menu items"s);
+
+            while (n_menuItems--)
+                if (!DeleteMenu(menu, 0, MF_BYPOSITION))
+                    throw WindowsError(LOG_INFO "Failed to delete menu item"s);
+
             MENUITEMINFO menuItemInfo{};
             menuItemInfo.cbSize = sizeof(menuItemInfo);
             menuItemInfo.fMask = MIIM_TYPE;
-            std::wstring file0(L"File0");
-            menuItemInfo.dwTypeData = std::data(file0);
-            if (!InsertMenuItem(menu, 0, MF_BYPOSITION, &menuItemInfo))
-                throw WindowsError("Failed to insert menu item");
+            for (std::wstring filepath : Windows::p_windows->config.recentFiles)
+            {
+                menuItemInfo.dwTypeData = std::data(filepath);
+                if (!InsertMenuItem(menu, 0, MF_BYPOSITION, &menuItemInfo))
+                    throw WindowsError(LOG_INFO "Failed to insert menu item"s);
+            }
         }
         else
             return defaultHandler();
@@ -393,11 +535,11 @@ try
 }
 catch (const std::exception& e)
 {
-    DebugFile("debug_windowPrecedure_error.txt") << e.what() << '\n';
+    DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
     return DefWindowProc(window, message, wParam, lParam);
 }
 
-long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e)
+long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e) noexcept
 {
     // VectoredHandler reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms681419
 
@@ -405,8 +547,12 @@ long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e)
     if (p_e->ExceptionRecord->ExceptionCode >> 0x18 == 0xE0)
         return EXCEPTION_CONTINUE_SEARCH; // Note that returning EXCEPTION_CONTINUE_EXECUTION would cancel the thrown C++ exception, essentially NOPing it
 
-    DebugFile debug("debug_vectoredHandler_error.txt");
-    debug << std::hex
+    // These are informational according to https://stackoverflow.com/questions/12298406/how-to-treat-0x40010006-exception-in-vectored-exception-handler
+    if (p_e->ExceptionRecord->ExceptionCode < 0x80000001)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    DebugFile debug(DebugFile::error);
+    debug << LOG_INFO << std::hex
         << (p_e->ExceptionRecord->ExceptionFlags == EXCEPTION_NONCONTINUABLE ? "Non-continuable" : "Continuable") << " Windows exception thrown:\n"
         << "Exception code: " << p_e->ExceptionRecord->ExceptionCode << " - ";
 
@@ -494,6 +640,7 @@ long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e)
 
     case EXCEPTION_STACK_OVERFLOW:
         debug << "EXCEPTION_STACK_OVERFLOW: The thread used up its stack.\n";
+        break;
     }
 
     debug
@@ -536,31 +683,56 @@ long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-Windows::Windows(HINSTANCE instance, int cmdShow)
-    : instance(instance)
+Windows::Windows(HINSTANCE instance, int cmdShow, Config& config) noexcept
+    : instance(instance), cmdShow(cmdShow), config(config)
 {
+    // No logging allowed here
+
     // SetErrorMode reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms680621
-    // AddVectoredExceptionHandler reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms679274
-    // LoadAccelerators reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646370
+
+    p_windows = this;
 
     // Do not display the Windows error reporting dialog
     SetErrorMode(SEM_NOGPFAULTERRORBOX);
+}
+
+void Windows::init()
+try
+{
+    // AddVectoredExceptionHandler reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms679274
+    // LoadAccelerators reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646370
 
     // Set Windows exception handler
     if (!AddVectoredExceptionHandler(~0ul, vectoredHandler))
         throw WindowsError("Could not add vectored exception handler");
 
+    // Create console window
+    if (!AllocConsole())
+        throw WindowsError("Failed to allocate console");
+
+    if (!std::freopen("CONIN$", "r", stdin))
+        throw std::runtime_error("Failed to redirect stdin");
+
+    if (!std::freopen("CONOUT$", "w", stdout))
+        throw std::runtime_error("Failed to redirect stdout");
+
+    if (!std::freopen("CONOUT$", "w", stderr))
+        throw std::runtime_error("Failed to redirect stderr");
+
+
     // Create main window
     registerClass();
-    createWindow(cmdShow);
+    createWindow();
 
     // Load keyboard shortcuts
     accelerators = LoadAccelerators(instance, MAKEINTRESOURCE(IDC_FUSIONLEVELEDITOR));
     if (!accelerators)
         throw WindowsError("Failed to load acclerators");
 }
+LOG_RETHROW
 
 void Windows::registerClass()
+try
 {
     // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
     // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
@@ -595,8 +767,10 @@ void Windows::registerClass()
     if (!registeredClass)
         throw WindowsError("Failed to register main window class");
 }
+LOG_RETHROW
 
-void Windows::createWindow(int cmdShow)
+void Windows::createWindow()
+try
 {
     // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
     // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
@@ -621,8 +795,10 @@ void Windows::createWindow(int cmdShow)
     if (!window)
         throw WindowsError("Failed to create main window");
 }
+LOG_RETHROW
 
 int Windows::eventLoop()
+try
 {
     // Message article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644927
     // GetMessage reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644936
@@ -645,3 +821,17 @@ int Windows::eventLoop()
         }
     }
 }
+LOG_RETHROW
+
+std::experimental::filesystem::path Windows::getDataDirectory() const
+try
+{
+    const char* const appdata(std::getenv("APPDATA"));
+    if (!appdata)
+        throw std::runtime_error(LOG_INFO "Could not get APPDATA environment variable");
+
+    const auto ret(std::experimental::filesystem::path(appdata) / "PJ"s);
+    create_directories(ret);
+    return ret;
+}
+LOG_RETHROW
