@@ -11,13 +11,13 @@
 #define LOG_RETHROW \
     catch (const std::exception& e) \
     { \
-        DebugFile(DebugFile::error) << LOG_INFO << "Exception thrown: "s << e.what() << '\n'; \
+        DebugFile(DebugFile::error) << LOG_INFO "Exception thrown: "s << e.what() << '\n'; \
         throw; \
     }
 
 class DebugFile : public std::ofstream
 {
-    static std::experimental::filesystem::path dataDirectory;
+    inline static std::filesystem::path dataDirectory;
 
 public:
     const inline static std::string
@@ -25,8 +25,8 @@ public:
         warning{"debug_warning.txt"s},
         info{"debug_info.txt"s};
 
-    DebugFile(std::experimental::filesystem::path filename);
+    DebugFile(std::filesystem::path filename);
 
-    static void init(std::experimental::filesystem::path dataDirectory_in);
+    static void init(std::filesystem::path dataDirectory_in);
     void writeImage(const halfword* data, word width, word height);
 };

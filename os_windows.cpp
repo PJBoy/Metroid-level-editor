@@ -20,9 +20,6 @@
 #include <locale>
 #include <memory>
 #include <stdexcept>
-#include <type_traits>
-
-Windows* Windows::p_windows;
 
 std::string toString(const std::wstring& from) noexcept
 {
@@ -106,12 +103,6 @@ public:
     {}
 };
 
-template<typename T, std::enable_if_t<std::is_enum_v<T>>* = nullptr>
-constexpr auto toInt(T v) noexcept
-{
-    return static_cast<std::underlying_type_t<T>>(v);
-}
-
 namespace Menu
 {
 /*
@@ -163,13 +154,6 @@ namespace Menu
         }
     };
 
-    // Until MSVS gets class template parameter deduction
-    template<size_t n_text>
-    constexpr auto makeItem(Id menuId, const wchar_t(&text)[n_text], ResInfo resInfo = {}) noexcept
-    {
-        return Item<n_text>(menuId, text, resInfo);
-    }
-    
     template<size_t n_text>
     struct Submenu
     {
@@ -181,39 +165,31 @@ namespace Menu
         {}
     };
 
-    // Until MSVS gets class template parameter deduction
-    template<size_t n_text>
-    constexpr auto makeSubmenu(Id menuId, const wchar_t(&text)[n_text], ResInfo resInfo = {}) noexcept
-    {
-        return Submenu<n_text>(menuId, text, resInfo);
-    }
-
     namespace Items
     {
-        constexpr auto dummy{makeItem(Id::dummy, L"", ResInfo::isLastItem)};
+        constexpr auto dummy{Item(Id::dummy, L"", ResInfo::isLastItem)};
 
-        constexpr auto file{makeSubmenu(Id::file, L"&File")};
-            constexpr auto open{makeItem(Id::open, L"&Open")};
-            constexpr auto recent{makeSubmenu(Id::recent, L"&Recent")};
+        constexpr auto file{Submenu(Id::file, L"&File")};
+            constexpr auto open{Item(Id::open, L"&Open")};
+            constexpr auto recent{Submenu(Id::recent, L"&Recent")};
                 /* Dummy */
-            constexpr auto exit{makeItem(Id::exit, L"E&xit", ResInfo::isLastItem)};
-        constexpr auto help{makeSubmenu(Id::help, L"&Help", ResInfo::isLastItem)};
-            constexpr auto about{makeItem(Id::about, L"&About", ResInfo::isLastItem)};
+            constexpr auto exit{Item(Id::exit, L"E&xit", ResInfo::isLastItem)};
+        constexpr auto help{Submenu(Id::help, L"&Help", ResInfo::isLastItem)};
+            constexpr auto about{Item(Id::about, L"&About", ResInfo::isLastItem)};
     };
 
     constexpr struct
     {
-        // My macro to clean this isn't working... I think an MSVC bug
-        // #define ITEM(name) decltype(Items::name) name(Items::name)
-        // ITEM(file); /* etc */
+        #define ITEM(name) decltype(Items::name) name{Items::name};
+        #define DUMMY(name) decltype(Items::dummy) temp_##name{Items::dummy};
         Header header{};
-        decltype(Items::file) file{Items::file};
-            decltype(Items::open) open{Items::open};
-            decltype(Items::recent) recent{Items::recent};
-                decltype(Items::dummy) temp{Items::dummy};
-            decltype(Items::exit) exit{Items::exit};
-        decltype(Items::help) help{Items::help};
-            decltype(Items::about) about{Items::about};
+        ITEM(file)
+            ITEM(open)
+            ITEM(recent)
+                DUMMY(recent)
+            ITEM(exit)
+        ITEM(help)
+            ITEM(about)
     } menu;
 }
 
@@ -471,14 +447,27 @@ try
         if (isWindowMenu)
             return defaultHandler();
 
+    /*
+        What I would like to have done is to get the ID of the menu item and compare it to the "recent" menu's ID `Menu::menu.recent.item.menuId`.
+        The menu ID is accessible via the wID member of the `MENUITEMINFO` struct, which is populated by `GetMenuItemInfo`.
+        The problem is that `GetMenuItemInfo` requires a parent menu handle (and either the index of the item within that menu or the ID of that item).
+        I have the index of the menu item within the parent menu, but only have the handle of the menu itself and not the parent menu, with no functions in the API that get the parent menu.
+
+        The result being that to check if menu being initialised is the 'recent' menu, I'm comparing the handle `menu` to the handle of the 'recent' submenu,
+        which fortunately can be found with its ID by using `GetMenuItemInfo` on the window menu.
+
+        N.B. There is a function `GetMenuItemID`, which *would* work like simpler `GetMenuItemInfo`, but for some reason is defined to return `-1` for submenus...
+    */
         MENUITEMINFO recentSubmenuInfo{};
         recentSubmenuInfo.cbSize = sizeof(recentSubmenuInfo);
-        recentSubmenuInfo.fMask = MIIM_SUBMENU;
+        recentSubmenuInfo.fMask  = MIIM_SUBMENU;
         if (!GetMenuItemInfo(GetMenu(window), Menu::menu.recent.item.menuId, MF_BYCOMMAND, &recentSubmenuInfo))
             throw WindowsError(LOG_INFO "Failed to get recent submenu item info"s);
 
         if (menu == recentSubmenuInfo.hSubMenu)
         {
+            // Populate recent files from config (clearing the submenu first)
+
             int n_menuItems(GetMenuItemCount(menu));
             if (n_menuItems == -1)
                 throw WindowsError(LOG_INFO "Failed to get number of menu items"s);
@@ -683,6 +672,7 @@ long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e) noexcept
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+
 Windows::Windows(HINSTANCE instance, int cmdShow, Config& config) noexcept
     : instance(instance), cmdShow(cmdShow), config(config)
 {
@@ -823,14 +813,14 @@ try
 }
 LOG_RETHROW
 
-std::experimental::filesystem::path Windows::getDataDirectory() const
+std::filesystem::path Windows::getDataDirectory() const
 try
 {
     const char* const appdata(std::getenv("APPDATA"));
     if (!appdata)
         throw std::runtime_error(LOG_INFO "Could not get APPDATA environment variable");
 
-    const auto ret(std::experimental::filesystem::path(appdata) / "PJ"s);
+    const auto ret(std::filesystem::path(appdata) / "PJ"s);
     create_directories(ret);
     return ret;
 }

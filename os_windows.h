@@ -18,7 +18,7 @@ class Windows : public Os
         *className = L"FusionLevelEditor";
 
     // Variables //
-    static Windows* p_windows; // Requires out-of-header definition
+    inline static Windows* p_windows;
     HINSTANCE instance; // Identifies the module (the executable)
     int cmdShow; // Needed for createWindow
     HACCEL accelerators;
@@ -35,5 +35,5 @@ public:
 
     void init() override;
     int eventLoop() override;
-    std::experimental::filesystem::path getDataDirectory() const override;
+    std::filesystem::path getDataDirectory() const override;
 };

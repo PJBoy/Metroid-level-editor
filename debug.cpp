@@ -9,29 +9,21 @@
 #include <unordered_set>
 #include <utility>
 
-std::experimental::filesystem::path DebugFile::dataDirectory;
-
 struct FilepathHash
 {
-    size_t operator()(const std::experimental::filesystem::path& filepath) const
+    size_t operator()(const std::filesystem::path& filepath) const
     {
-        return hash_value(canonical(filepath)); // TODO: replace with weakly_canonical when MSVC merges filesystem
+        return hash_value(weakly_canonical(filepath));
     }
 };
 
-DebugFile::DebugFile(std::experimental::filesystem::path filename)
+DebugFile::DebugFile(std::filesystem::path filename)
 try
 {
-    const std::experimental::filesystem::path filepath(dataDirectory / filename);
-
-    // TODO: remove when FilepathHash uses weakly_canonical
-    {
-        std::ofstream(filepath, app).exceptions(failbit | badbit);
-        std::cout << filepath << '\n';
-    }
+    const std::filesystem::path filepath(dataDirectory / filename);
 
     // If first use of file, clear it, otherwise insert spaces
-    static std::unordered_set<std::experimental::filesystem::path, FilepathHash> initialised;
+    static std::unordered_set<std::filesystem::path, FilepathHash> initialised;
     if (initialised.insert(filepath).second)
         open(std::move(filepath), trunc);
     else
@@ -45,7 +37,7 @@ catch (const std::exception&)
     // There's nothing I can do to handle this exception; but catch it anyways, because this is a non-fatal error
 }
 
-void DebugFile::init(std::experimental::filesystem::path dataDirectory_in)
+void DebugFile::init(std::filesystem::path dataDirectory_in)
 {
     dataDirectory = dataDirectory_in;
 }

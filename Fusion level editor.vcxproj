@@ -206,6 +206,7 @@
     <ClInclude Include="global.h" />
     <ClInclude Include="iterator.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="config.cpp" />

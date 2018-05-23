@@ -10,7 +10,7 @@
 #include <stdexcept>
 #include <sstream>
 
-void Config::init(const std::experimental::filesystem::path& dataDirectory)
+void Config::init(const std::filesystem::path& dataDirectory)
 try
 {
     filepath = dataDirectory / filename;
@@ -23,8 +23,8 @@ try
     std::ofstream out(filepath);
     out.exceptions(std::ios::badbit | std::ios::failbit);
     out << "Version: "s << maxVersion << '\n';
-    for (const std::experimental::filesystem::path& file : recentFiles)
-        out << "File: "s << quoted(file.u8string()) << '\n'; // I shouldn't need to do quoted, hoping to remove when MSVC merges filesystem
+    for (const std::filesystem::path& file : recentFiles)
+        out << "File: "s << file << '\n';
 }
 LOG_RETHROW
 
@@ -85,8 +85,8 @@ try
         {
             std::string path;
             std::istringstream in_filepath{std::string(match[1])};
-            in_filepath >> quoted(path); // Hoping to avoid this in future MSVC release
-            recentFiles.push_back(std::experimental::filesystem::path(path));
+            in_filepath >> path;
+            recentFiles.push_back(std::filesystem::path(path));
             continue;
         }
         
@@ -96,7 +96,7 @@ try
 }
 LOG_RETHROW
 
-void Config::addRecentFile(std::experimental::filesystem::path recentFilepath)
+void Config::addRecentFile(std::filesystem::path recentFilepath)
 try
 {
     if (auto&& it(std::find(std::begin(recentFiles), std::end(recentFiles), recentFilepath)); it != std::end(recentFiles))

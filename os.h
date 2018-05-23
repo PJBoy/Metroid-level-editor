@@ -11,5 +11,5 @@ public:
 
     virtual void init() = 0;
     virtual int eventLoop() = 0;
-    virtual std::experimental::filesystem::path getDataDirectory() const = 0;
+    virtual std::filesystem::path getDataDirectory() const = 0;
 };
