@@ -9,6 +9,8 @@
 #include <unordered_set>
 #include <utility>
 
+std::filesystem::path DebugFile::dataDirectory;
+
 struct FilepathHash
 {
     size_t operator()(const std::filesystem::path& filepath) const

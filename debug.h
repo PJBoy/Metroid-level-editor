@@ -17,7 +17,8 @@
 
 class DebugFile : public std::ofstream
 {
-    inline static std::filesystem::path dataDirectory;
+    // MSVC bug: making this static variable inline causes the following const inline statics to be empty strings
+    static std::filesystem::path dataDirectory;
 
 public:
     const inline static std::string

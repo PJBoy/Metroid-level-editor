@@ -109,6 +109,9 @@ namespace Menu
     Extended menu format:
         Header: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647567
         Item: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647569
+
+    I'm defining menu manually here rather than using the resource editor because this is the only way I can give submenus an identifier,
+    presumably because the resource editor uses the old menu format, which doesn't support submenus having an ID(?)
 */
 
     struct Header
@@ -180,8 +183,8 @@ namespace Menu
 
     constexpr struct
     {
-        #define ITEM(name) decltype(Items::name) name{Items::name};
-        #define DUMMY(name) decltype(Items::dummy) temp_##name{Items::dummy};
+    #define ITEM(name) decltype(Items::name) name{Items::name};
+    #define DUMMY(name) decltype(Items::dummy) temp_##name{Items::dummy};
         Header header{};
         ITEM(file)
             ITEM(open)
@@ -190,6 +193,8 @@ namespace Menu
             ITEM(exit)
         ITEM(help)
             ITEM(about)
+    #undef DUMMY
+    #undef ITEM
     } menu;
 }
 
@@ -497,7 +502,7 @@ try
     {
         // GetUpdateRect reference: https://msdn.microsoft.com/en-us/library/dd144943
         RECT updateRect;
-        BOOL&& notEmpty(GetUpdateRect(window, &updateRect, false));
+        BOOL notEmpty(GetUpdateRect(window, &updateRect, false));
         if (notEmpty)
         {
             // BeginPaint reference: https://msdn.microsoft.com/en-us/library/dd183362

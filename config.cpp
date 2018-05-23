@@ -83,10 +83,10 @@ try
         // Recent files
         if (std::regex_match(line, match, regex_file))
         {
-            std::string path;
+            std::filesystem::path path;
             std::istringstream in_filepath{std::string(match[1])};
             in_filepath >> path;
-            recentFiles.push_back(std::filesystem::path(path));
+            recentFiles.push_back(std::move(path));
             continue;
         }
         
