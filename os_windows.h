@@ -27,7 +27,7 @@ class Windows : public Os
     // Functions //
     void registerClass();
     void createWindow();
-    friend std::intptr_t CALLBACK windowPrecedure(HWND window, unsigned message, std::uintptr_t wParam, std::intptr_t lParam) noexcept;
+    friend LRESULT CALLBACK windowPrecedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
 
 public:
     Windows(HINSTANCE instance, int cmdShow, Config& config) noexcept;

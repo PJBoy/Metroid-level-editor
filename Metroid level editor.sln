@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27004.2006
+VisualStudioVersion = 15.0.27705.2000
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Fusion level editor", "Fusion level editor.vcxproj", "{E58DA873-B096-4125-9BDD-A52AC65EDC7B}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Metroid level editor", "Meroid level editor.vcxproj", "{E58DA873-B096-4125-9BDD-A52AC65EDC7B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -26,6 +26,6 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {2DF7AB85-B483-422B-8E04-E43AEE82D3B0}
+		SolutionGuid = {1CF958DE-2760-406E-A808-9BD16D5F3FFC}
 	EndGlobalSection
 EndGlobal

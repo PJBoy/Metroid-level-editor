@@ -55,7 +55,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Fusion level editor.rc">
+    <ResourceCompile Include="Metroid level editor.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
@@ -63,7 +63,7 @@
     <Image Include="small.ico">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="Fusion level editor.ico">
+    <Image Include="Metroid level editor.ico">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

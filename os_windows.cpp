@@ -21,12 +21,14 @@
 #include <memory>
 #include <stdexcept>
 
+
 std::string toString(const std::wstring& from) noexcept
 {
     // TODO: wstring_convert et al are deprecated as of C++17
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     return converter.to_bytes(from);
 }
+
 
 class WindowsError : public std::runtime_error
 {
@@ -198,7 +200,8 @@ namespace Menu
     } menu;
 }
 
-std::intptr_t CALLBACK aboutPrecedure(HWND window, unsigned message, std::uintptr_t wParam, std::intptr_t) noexcept
+
+std::intptr_t CALLBACK aboutPrecedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR) noexcept
 try
 {
     // Dialog procedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645469
@@ -226,7 +229,7 @@ try
         case IDCANCEL:
         {
             // EndDialog reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645472
-            const intptr_t ret(id);
+            const std::intptr_t ret(id);
             if (!EndDialog(window, ret))
                 throw WindowsError("Failed to close about dialog");
 
@@ -246,7 +249,7 @@ catch (const std::exception& e)
     return true;
 }
 
-std::intptr_t CALLBACK windowPrecedure(HWND window, unsigned message, std::uintptr_t wParam, std::intptr_t lParam) noexcept
+LRESULT CALLBACK windowPrecedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
 try
 {
     // Window precedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632593
@@ -720,7 +723,7 @@ try
     createWindow();
 
     // Load keyboard shortcuts
-    accelerators = LoadAccelerators(instance, MAKEINTRESOURCE(IDC_FUSIONLEVELEDITOR));
+    accelerators = LoadAccelerators(instance, MAKEINTRESOURCE(IDC_METROIDLEVELEDITOR));
     if (!accelerators)
         throw WindowsError("Failed to load acclerators");
 }
@@ -741,7 +744,7 @@ try
     wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
     wcex.lpfnWndProc = windowPrecedure;
     wcex.hInstance = instance;
-    wcex.hIcon = static_cast<HICON>(LoadImage(instance, MAKEINTRESOURCE(IDI_FUSIONLEVELEDITOR), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
+    wcex.hIcon = static_cast<HICON>(LoadImage(instance, MAKEINTRESOURCE(IDI_METROIDLEVELEDITOR), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
     if (!wcex.hIcon)
         throw WindowsError("Failed to load icon");
 
