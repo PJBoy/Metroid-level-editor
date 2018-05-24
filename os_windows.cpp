@@ -11,6 +11,7 @@
 #include "global.h"
     
 #include <commdlg.h>
+#include <cderr.h>
 
 #include <codecvt>
 #include <cstdint>
@@ -79,7 +80,6 @@ protected:
     static std::string makeMessage(unsigned long errorId, const std::string& extraMessage) noexcept
     try
     {
-        const std::string errorMessage(toString(getErrorMessage(errorId)));
         return makeMessage(errorId) + ' ' + extraMessage;
     }
     catch (...)
@@ -101,6 +101,128 @@ public:
     {}
 
     WindowsError(unsigned long errorId, const std::string& extraMessage) noexcept
+        : std::runtime_error(makeMessage(errorId, extraMessage))
+    {}
+};
+
+class CommonDialogError : public std::runtime_error
+{
+    // CommDlgExtendedError reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646916
+
+protected:
+    static std::string getErrorMessage(unsigned long errorId)
+    try
+    {
+        switch (errorId)
+        {
+        default:
+            return "Unknown error."s;
+
+        case CDERR_DIALOGFAILURE:
+            return "CDERR_DIALOGFAILURE: The dialog box could not be created. The common dialog box function's call to the DialogBox function failed. For example, this error occurs if the common dialog box call specifies an invalid window handle."s;
+
+        case CDERR_FINDRESFAILURE:
+            return "CDERR_FINDRESFAILURE: The common dialog box function failed to find a specified resource."s;
+
+        case CDERR_INITIALIZATION:
+            return "CDERR_INITIALIZATION: The common dialog box function failed during initialization. This error often occurs when sufficient memory is not available."s;
+
+        case CDERR_LOADRESFAILURE:
+            return "CDERR_LOADRESFAILURE: The common dialog box function failed to load a specified resource."s;
+
+        case CDERR_LOADSTRFAILURE:
+            return "CDERR_LOADSTRFAILURE: The common dialog box function failed to load a specified string."s;
+
+        case CDERR_LOCKRESFAILURE:
+            return "CDERR_LOCKRESFAILURE: The common dialog box function failed to lock a specified resource."s;
+
+        case CDERR_MEMALLOCFAILURE:
+            return "CDERR_MEMALLOCFAILURE: The common dialog box function was unable to allocate memory for internal structures."s;
+
+        case CDERR_MEMLOCKFAILURE:
+            return "CDERR_MEMLOCKFAILURE: The common dialog box function was unable to lock the memory associated with a handle."s;
+
+        case CDERR_NOHINSTANCE:
+            return "CDERR_NOHINSTANCE: The ENABLETEMPLATE flag was set in the Flags member of the initialization structure for the corresponding common dialog box, but you failed to provide a corresponding instance handle."s;
+
+        case CDERR_NOHOOK: 
+            return "CDERR_NOHOOK: The ENABLEHOOK flag was set in the Flags member of the initialization structure for the corresponding common dialog box, but you failed to provide a pointer to a corresponding hook procedure."s;
+
+        case CDERR_NOTEMPLATE:
+            return "CDERR_NOTEMPLATE: The ENABLETEMPLATE flag was set in the Flags member of the initialization structure for the corresponding common dialog box, but you failed to provide a corresponding template."s;
+
+        case CDERR_REGISTERMSGFAIL:
+            return "CDERR_REGISTERMSGFAIL: The RegisterWindowMessage function returned an error code when it was called by the common dialog box function."s;
+
+        case CDERR_STRUCTSIZE:
+            return "CDERR_STRUCTSIZE: The lStructSize member of the initialization structure for the corresponding common dialog box is invalid."s;
+
+        case CFERR_MAXLESSTHANMIN:
+            return "CFERR_MAXLESSTHANMIN: The size specified in the nSizeMax member of the CHOOSEFONT structure is less than the size specified in the nSizeMin member."s;
+
+        case CFERR_NOFONTS:
+            return "CFERR_NOFONTS: No fonts exist."s;
+
+        case FNERR_BUFFERTOOSMALL:
+            return "FNERR_BUFFERTOOSMALL: The buffer pointed to by the lpstrFile member of the OPENFILENAME structure is too small for the file name specified by the user. The first two bytes of the lpstrFile buffer contain an integer value specifying the size required to receive the full name, in characters."s;
+
+        case FNERR_INVALIDFILENAME:
+            return "FNERR_INVALIDFILENAME: A file name is invalid."s;
+
+        case FNERR_SUBCLASSFAILURE:
+            return "FNERR_SUBCLASSFAILURE: An attempt to subclass a list box failed because sufficient memory was not available."s;
+
+        case FRERR_BUFFERLENGTHZERO:
+            return "FRERR_BUFFERLENGTHZERO: A member of the FINDREPLACE structure points to an invalid buffer."s;
+        }
+    }
+    LOG_RETHROW
+
+    static std::string makeMessage() noexcept
+    {
+        return makeMessage(CommDlgExtendedError());
+    }
+
+    static std::string makeMessage(const std::string& extraMessage) noexcept
+    {
+        return makeMessage(CommDlgExtendedError(), extraMessage);
+    }
+
+    static std::string makeMessage(unsigned long errorId) noexcept
+    try
+    {
+        const std::string errorMessage(getErrorMessage(errorId));
+        return "Win32 API common dialog box error occurred, error code " + std::to_string(errorId) + ": " + errorMessage;
+    }
+    catch (...)
+    {
+        return "Win32 API common dialog box error occurred. Unknown error. An exception was thrown during error message construction.";
+    }
+
+    static std::string makeMessage(unsigned long errorId, const std::string& extraMessage) noexcept
+    try
+    {
+        return makeMessage(errorId) + ' ' + extraMessage;
+    }
+    catch (...)
+    {
+        return "Win32 API common dialog box error occurred. Unknown error. An exception was thrown during error message construction.";
+    }
+
+public:
+    CommonDialogError() noexcept
+        : std::runtime_error(makeMessage())
+    {}
+
+    CommonDialogError(unsigned long errorId) noexcept
+        : std::runtime_error(makeMessage(errorId))
+    {}
+
+    CommonDialogError(const std::string& extraMessage) noexcept
+        : std::runtime_error(makeMessage(extraMessage))
+    {}
+
+    CommonDialogError(unsigned long errorId, const std::string& extraMessage) noexcept
         : std::runtime_error(makeMessage(errorId, extraMessage))
     {}
 };
@@ -246,7 +368,60 @@ try
 catch (const std::exception& e)
 {
     DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
+    return false;
+}
+
+std::uintptr_t CALLBACK openRomHookPrecedure(HWND window, unsigned message, std::uintptr_t, LONG_PTR lParam) noexcept
+try
+{
+    // Open file name hook procedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646931
+    // Open file name hook reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646960#_win32_Explorer_Style_Hook_Procedures
+
+    // TODO: replace dummy function
+    auto verifyRom([](const std::filesystem::path& path)
+    {
+        return true;
+    });
+
+    switch (message)
+    {
+    default:
+        return false;
+
+    // WM_INITDIALOG reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645428
+    case WM_INITDIALOG:
+        break;
+
+    // WM_NOTIFY reference: https://msdn.microsoft.com/en-us/library/windows/desktop/bb775583
+    case WM_NOTIFY:
+    {
+        // NMHDR reference: https://msdn.microsoft.com/en-us/library/windows/desktop/bb775514
+        // OFNOTIFY reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646836
+        // CDN_FILEOK reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646857
+        // SetWindowLongPtr: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644898
+
+        const NMHDR* const p_header = reinterpret_cast<const NMHDR* const>(lParam);
+        if (p_header->code != CDN_FILEOK)
+            return false;
+
+        const OFNOTIFY* const p_notification = reinterpret_cast<const OFNOTIFY* const>(p_header);
+        if (verifyRom(p_notification->lpOFN->lpstrFile))
+            return false;
+
+        SetLastError(0);
+        if (!SetWindowLongPtr(window, DWLP_MSGRESULT, ~0) && GetLastError())
+            throw WindowsError("Failed to reject file after failing ROM verification"s);
+
+        break;
+    }
+    }
+
     return true;
+}
+catch (const std::exception& e)
+{
+    DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
+    return false;
 }
 
 LRESULT CALLBACK windowPrecedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
@@ -284,104 +459,33 @@ try
             // GetOpenFileName reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646927
             // CommDlgExtendedError: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646916
 
-            // Grabbed this from old code. TODO: docs say this is supersceded by 'Common Item Dialog'
-
-            // Note that the initial directory is given the first time by filename or initialDirectory (in that order),
-            // successive times are given by the previously chosen directory if initialDirectory hasn't changed (otherwise the above);
-            // otherwise, the current directory is used if it has any files matching the default filter, otherwise the user' home folder or the desktop
-
-            // TODO: use OFN_ENABLEHOOK | OFN_ENABLEINCLUDENOTIFY with a hook function to list only those files whose ROM header is supported
-            // Note that if a hooking function is specified, OFN_ENABLESIZING | OFN_EXPLORER should also be specified
-
             wchar_t filepath[0x100];
             filepath[0] = L'\0';
 
-            const DWORD structSize(sizeof(OPENFILENAME));
-            const HWND owner(window);
-            const HINSTANCE instance{};
-            const wchar_t* const filter
-            (
+            OPENFILENAME ofn{};
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = window;
+            ofn.lpstrFilter =
+                L"ROM files\0*.abg;*.gba;*.smc;*.sfc;\0"
                 L"GBA ROM files\0*.abg;*.gba;\0"
-                L"All files\0*\0"
-            );
+                L"SNES ROM files\0*.smc;*.sfc;\0"
+                L"All files\0*\0";
 
-            // Optional buffer for user-writable filter
-            wchar_t* const customFilter{};
-            const DWORD n_customFilter{};
-
-            // Optionally specify the index of the default filter
-            const DWORD filterIndex{};
-
-            wchar_t* const p_filepath(filepath);
-            DWORD n_filepath(DWORD(std::size(filepath)));
-
-            // Optional buffer for a copy of the filename.extension component
-            wchar_t* const filename{};
-            const DWORD n_filename{};
-
-            // Optional initial directory
-            wchar_t* const initialDirectory{};
-
-            // Optional title of window (default: "Open")
-            wchar_t* const title{};
-
-            const DWORD flags(OFN_FILEMUSTEXIST);
-
-            // Will contain the index of the first character of the filename within filepath
-            const WORD i_filename{};
-
-            // Will contain the index of the first character of the file extension within filepath or 0 if there is no extension
-            const WORD i_fileExtension{};
-
-            // Optional extension to add to filepath if it doesn't already have one (three characters max)
-            const wchar_t* const defaultExtension{};
-
-            // Arbitrary custom data for the hook function, which receives the OPENFILENAME structure via WM_INITDIALOG
-            const LPARAM customData{};
-
-            // Optional pointer to hook function, requires OFN_ENABLEHOOK
-            const LPOFNHOOKPROC hook{};
-
-            // For loading a resource dialog, requires OFN_ENABLETEMPLATE
-            wchar_t* const templateName(nullptr);
-
-            void* const reserved_0{};
-            const DWORD reserved_1{};
-
-            // TODO: set to OFN_EX_NOPLACESBAR to hide the places sidebar based on a configuration file
-            const DWORD flagsEx{};
-
-            OPENFILENAME ofn
-            {
-                structSize,
-                owner,
-                instance,
-                filter,
-                customFilter,
-                n_customFilter,
-                filterIndex,
-                p_filepath,
-                n_filepath,
-                filename,
-                n_filename,
-                initialDirectory,
-                title,
-                flags,
-                i_filename,
-                i_fileExtension,
-                defaultExtension,
-                customData,
-                hook,
-                templateName,
-                reserved_0,
-                reserved_1,
-                flagsEx
-            };
+            ofn.lpstrFile = std::data(filepath);
+            ofn.nMaxFile = static_cast<unsigned long>(std::size(filepath));
+            //*
+            // Modern dialog
+            ofn.Flags = OFN_FILEMUSTEXIST;
+            /*/
+            // Classic dialog, but verifies ROMs
+            ofn.Flags = OFN_FILEMUSTEXIST | OFN_ENABLEHOOK | OFN_EXPLORER | OFN_ENABLESIZING;
+            ofn.lpfnHook = openRomHookPrecedure;
+            //*/
             if (!GetOpenFileName(&ofn))
             {
-                const DWORD error(CommDlgExtendedError());
+                unsigned long error(CommDlgExtendedError());
                 if (error)
-                    throw WindowsError(error);
+                    throw CommonDialogError(error);
 
                 // Cancelled
                 break;
@@ -396,6 +500,9 @@ try
             {
                 DebugFile(DebugFile::error) << LOG_INFO "Failed to add and save file to config: "s << e.what() << '\n';
             }
+
+            // TODO: open ROM and what not, won't bother with spawning threads as there's no meaningful operation that can be done until the ROM has loaded anyway
+
             break;
         }
 

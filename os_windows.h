@@ -18,7 +18,7 @@ class Windows : public Os
         *className = L"FusionLevelEditor";
 
     // Variables //
-    inline static Windows* p_windows;
+    inline static Windows* p_windows; // Provides access to this global state from callback functions
     HINSTANCE instance; // Identifies the module (the executable)
     int cmdShow; // Needed for createWindow
     HACCEL accelerators;
