@@ -6,10 +6,11 @@
 // Window article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632598
 
 #include "os_windows.h"
-#include "resource.h"
 
 #include "global.h"
     
+#include "resource.h"
+
 #include <commdlg.h>
 #include <cderr.h>
 

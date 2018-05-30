@@ -36,7 +36,19 @@
     <ClInclude Include="iterator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="util.h">
+    <ClInclude Include="rom.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gba.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mf.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mzm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -51,6 +63,21 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="rom.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="gba.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mf.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mzm.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

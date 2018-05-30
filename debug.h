@@ -29,5 +29,5 @@ public:
     DebugFile(std::filesystem::path filename);
 
     static void init(std::filesystem::path dataDirectory_in);
-    void writeImage(const halfword* data, word width, word height);
+    void writeImage(const uint16_t* data, uint32_t width, uint32_t height);
 };

@@ -204,15 +204,24 @@
   <ItemGroup>
     <ClInclude Include="config.h" />
     <ClInclude Include="debug.h" />
+    <ClInclude Include="gba.h" />
     <ClInclude Include="global.h" />
     <ClInclude Include="iterator.h" />
+    <ClInclude Include="mf.h" />
+    <ClInclude Include="mzm.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="util.h" />
+    <ClInclude Include="rom.h" />
+    <ClInclude Include="sm.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="config.cpp" />
     <ClCompile Include="debug.cpp" />
+    <ClCompile Include="gba.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="mf.cpp" />
+    <ClCompile Include="mzm.cpp" />
+    <ClCompile Include="rom.cpp" />
+    <ClCompile Include="sm.cpp" />
     <ClInclude Include="os.h" />
     <ClCompile Include="os_windows.cpp" />
     <ClInclude Include="os_windows.h" />

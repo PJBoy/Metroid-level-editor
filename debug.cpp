@@ -1,4 +1,5 @@
 #include "debug.h"
+
 #include "global.h"
 
 #include <chrono>
@@ -44,34 +45,34 @@ void DebugFile::init(std::filesystem::path dataDirectory_in)
     dataDirectory = dataDirectory_in;
 }
 
-void DebugFile::writeImage(const halfword* data, word width, word height)
+void DebugFile::writeImage(const uint16_t* data, uint32_t width, uint32_t height)
 {
-    byte bmpHeader[]
+    uint8_t bmpHeader[]
     {
         0x42, 0x4D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x00, 0x28, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x18, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
-    *((word*)(&bmpHeader[2])) = width * height + sizeof(bmpHeader);
-    *((word*)(&bmpHeader[0x12])) = width;
-    *((word*)(&bmpHeader[0x16])) = height;
-    *((word*)(&bmpHeader[0x22])) = width * height;
-    write((char*)(bmpHeader), sizeof(bmpHeader));
+    *reinterpret_cast<uint32_t*>(&bmpHeader[2]) = width * height + sizeof(bmpHeader);
+    *reinterpret_cast<uint32_t*>(&bmpHeader[0x12]) = width;
+    *reinterpret_cast<uint32_t*>(&bmpHeader[0x16]) = height;
+    *reinterpret_cast<uint32_t*>(&bmpHeader[0x22]) = width * height;
+    write(reinterpret_cast<const char*>(bmpHeader), sizeof(bmpHeader));
 
     const n_t padding((4 - width * 3 % 4) % 4);
     for (index_t y(height); y; --y)
     {
         for (index_t x(0); x < width; ++x)
         {
-            const halfword bgr15(data[y*width + x]);
-            const byte bgr24[]
+            const uint16_t bgr15(data[y*width + x]);
+            const uint8_t bgr24[]
             {
-                byte((bgr15 >> 10 & 0x1F) * 8),
-                byte((bgr15 >> 5  & 0x1F) * 8),
-                byte((bgr15       & 0x1F) * 8)
+                uint8_t((bgr15 >> 10 & 0x1F) * 8),
+                uint8_t((bgr15 >> 5  & 0x1F) * 8),
+                uint8_t((bgr15       & 0x1F) * 8)
             };
-            write((char*)(bgr24), sizeof(bgr24));
+            write(reinterpret_cast<const char*>(bgr24), sizeof(bgr24));
         }
 
         for (index_t i(padding); i; --i)
