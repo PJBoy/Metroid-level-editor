@@ -25,6 +25,14 @@ protected:
             return ret;
         }
         LOG_RETHROW
+
+        template<typename T, n_t n>
+        std::array<T, n> get(index_t address)
+        try
+        {
+            return get<std::array<T, n>>(address);
+        }
+        LOG_RETHROW
     };
 
     std::filesystem::path filepath;

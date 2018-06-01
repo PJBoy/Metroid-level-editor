@@ -4,12 +4,13 @@
 // Windows API reference - data types: https://msdn.microsoft.com/en-us/library/aa383751
 // Other Windows API reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ff818516
 // Window article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632598
-
+    
 #include "os_windows.h"
 
-#include "global.h"
-    
 #include "resource.h"
+#include "rom.h"
+
+#include "global.h"
 
 #include <commdlg.h>
 #include <cderr.h>
@@ -29,6 +30,13 @@ std::string toString(const std::wstring& from) noexcept
     // TODO: wstring_convert et al are deprecated as of C++17
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     return converter.to_bytes(from);
+}
+
+std::wstring toWstring(const std::string& from) noexcept
+{
+    // TODO: wstring_convert et al are deprecated as of C++17
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+    return converter.from_bytes(from);
 }
 
 
@@ -378,12 +386,6 @@ try
     // Open file name hook procedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646931
     // Open file name hook reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646960#_win32_Explorer_Style_Hook_Procedures
 
-    // TODO: replace dummy function
-    auto verifyRom([](const std::filesystem::path& path)
-    {
-        return true;
-    });
-
     switch (message)
     {
     default:
@@ -406,12 +408,14 @@ try
             return false;
 
         const OFNOTIFY* const p_notification = reinterpret_cast<const OFNOTIFY* const>(p_header);
-        if (verifyRom(p_notification->lpOFN->lpstrFile))
+        if (Rom::verifyRom(p_notification->lpOFN->lpstrFile))
             return false;
 
         SetLastError(0);
         if (!SetWindowLongPtr(window, DWLP_MSGRESULT, ~0) && GetLastError())
             throw WindowsError("Failed to reject file after failing ROM verification"s);
+
+        Windows::p_windows->error(L"Not a valid ROM");
 
         break;
     }
@@ -444,7 +448,7 @@ try
     case WM_COMMAND:
     {
         const bool isControl(lParam != 0);
-        const WORD id(LOWORD(wParam));
+        const unsigned short id(LOWORD(wParam));
 
         if (isControl)
             return defaultHandler();
@@ -474,7 +478,7 @@ try
 
             ofn.lpstrFile = std::data(filepath);
             ofn.nMaxFile = static_cast<unsigned long>(std::size(filepath));
-            //*
+            /*
             // Modern dialog
             ofn.Flags = OFN_FILEMUSTEXIST;
             /*/
@@ -502,8 +506,15 @@ try
                 DebugFile(DebugFile::error) << LOG_INFO "Failed to add and save file to config: "s << e.what() << '\n';
             }
 
-            // TODO: open ROM and what not, won't bother with spawning threads as there's no meaningful operation that can be done until the ROM has loaded anyway
-
+            try
+            {
+                Windows::p_windows->p_rom = Rom::loadRom(filepath);
+            }
+            catch (const std::exception& e)
+            {
+                Windows::p_windows->error(toWstring(e.what()));
+            }
+            
             break;
         }
 
@@ -939,5 +950,14 @@ try
     const auto ret(std::filesystem::path(appdata) / "PJ"s);
     create_directories(ret);
     return ret;
+}
+LOG_RETHROW
+
+void Windows::error(const std::wstring& errorText) const
+try
+{
+    // MessageBox reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645505
+    if (!MessageBox(nullptr, std::data(errorText), nullptr, MB_ICONERROR))
+        throw WindowsError("Failed to error message box"s);
 }
 LOG_RETHROW

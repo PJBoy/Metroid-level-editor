@@ -9,6 +9,7 @@
 
 class Os
 {
+protected:
     std::unique_ptr<Rom> p_rom;
 
 public:
@@ -17,4 +18,5 @@ public:
     virtual void init() = 0;
     virtual int eventLoop() = 0;
     virtual std::filesystem::path getDataDirectory() const = 0;
+    virtual void error(const std::wstring & errorText) const = 0;
 };

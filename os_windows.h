@@ -28,6 +28,7 @@ class Windows : public Os
     void registerClass();
     void createWindow();
     friend LRESULT CALLBACK windowPrecedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
+    friend std::uintptr_t CALLBACK openRomHookPrecedure(HWND window, unsigned message, std::uintptr_t, LONG_PTR lParam) noexcept;
 
 public:
     Windows(HINSTANCE instance, int cmdShow, Config& config) noexcept;
@@ -36,4 +37,5 @@ public:
     void init() override;
     int eventLoop() override;
     std::filesystem::path getDataDirectory() const override;
+    void error(const std::wstring & errorText) const override;
 };

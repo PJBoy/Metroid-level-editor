@@ -1,5 +1,9 @@
 #include "rom.h"
 
+#include "mf.h"
+#include "mzm.h"
+#include "sm.h"
+
 #include "global.h"
 
 Rom::Reader::Reader(std::filesystem::path filepath)
@@ -40,6 +44,27 @@ catch (const std::exception&)
 std::unique_ptr<Rom> Rom::loadRom(std::filesystem::path filepath)
 try
 {
+    try
+    {
+        return std::make_unique<Sm>(filepath);
+    }
+    catch (const std::exception&)
+    {}
+
+    try
+    {
+        return std::make_unique<Mf>(filepath);
+    }
+    catch (const std::exception&)
+    {}
+
+    try
+    {
+        return std::make_unique<Mzm>(filepath);
+    }
+    catch (const std::exception&)
+    {}
+
     throw std::runtime_error("Not a valid ROM"s);
 }
 LOG_RETHROW
