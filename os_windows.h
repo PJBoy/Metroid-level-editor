@@ -10,25 +10,52 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-class Windows : public Os
+class Windows final : public Os
 {
+    class LevelView
+    {
+        const inline static wchar_t* const className = L"LevelViewer";
+
+        inline static LevelView* p_levelView;
+        Windows& windows;
+        HWND window;
+
+        static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
+
+    public:
+        LevelView(Windows& windows);
+        LevelView(const LevelView&) = delete;
+        LevelView(LevelView&&) = delete;
+        LevelView& operator=(const LevelView&) = delete;
+        LevelView& operator=(LevelView&&) = delete;
+        void create(int x, int y, int width, int height);
+        void destroy();
+    };
+
     // Constants //
     const inline static wchar_t
-        *titleString = L"Fusion editor",
-        *className = L"FusionLevelEditor";
+        *const titleString = L"Metroid editor",
+        *const className = L"MetroidLevelEditor";
 
     // Variables //
     inline static Windows* p_windows; // Provides access to this global state from callback functions
     HINSTANCE instance; // Identifies the module (the executable)
+    HWND window; // Identifies the window (needed for child windows)
     int cmdShow; // Needed for createWindow
     HACCEL accelerators;
     Config& config; // Reference held to update recent files in response to file opening
+    std::unique_ptr<LevelView> p_levelView;
 
     // Functions //
     void registerClass();
     void createWindow();
-    friend LRESULT CALLBACK windowPrecedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
-    friend std::uintptr_t CALLBACK openRomHookPrecedure(HWND window, unsigned message, std::uintptr_t, LONG_PTR lParam) noexcept;
+    void error(const std::wstring& errorText) const;
+    void createChildWindows();
+    void destroyChildWindows();
+    void handleCommand(unsigned int id, bool isAccelerator);
+    void openRom(std::filesystem::path filepath);
+    static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
+    static std::uintptr_t CALLBACK openRomHookProcedure(HWND window, unsigned message, std::uintptr_t, LONG_PTR lParam) noexcept;
 
 public:
     Windows(HINSTANCE instance, int cmdShow, Config& config) noexcept;
@@ -37,5 +64,5 @@ public:
     void init() override;
     int eventLoop() override;
     std::filesystem::path getDataDirectory() const override;
-    void error(const std::wstring & errorText) const override;
+    void error(const std::string & errorText) const override;
 };

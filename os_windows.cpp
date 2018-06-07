@@ -332,7 +332,7 @@ namespace Menu
 }
 
 
-std::intptr_t CALLBACK aboutPrecedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR) noexcept
+std::intptr_t CALLBACK aboutProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR) noexcept
 try
 {
     // Dialog procedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645469
@@ -380,7 +380,7 @@ catch (const std::exception& e)
     return false;
 }
 
-std::uintptr_t CALLBACK openRomHookPrecedure(HWND window, unsigned message, std::uintptr_t, LONG_PTR lParam) noexcept
+std::uintptr_t CALLBACK Windows::openRomHookProcedure(HWND window, unsigned message, std::uintptr_t, LONG_PTR lParam) noexcept
 try
 {
     // Open file name hook procedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646931
@@ -415,7 +415,7 @@ try
         if (!SetWindowLongPtr(window, DWLP_MSGRESULT, ~0) && GetLastError())
             throw WindowsError("Failed to reject file after failing ROM verification"s);
 
-        Windows::p_windows->error(L"Not a valid ROM");
+        p_windows->error(L"Not a valid ROM");
 
         break;
     }
@@ -429,7 +429,7 @@ catch (const std::exception& e)
     return false;
 }
 
-LRESULT CALLBACK windowPrecedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
+LRESULT CALLBACK Windows::windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
 try
 {
     // Window precedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632593
@@ -454,90 +454,10 @@ try
             return defaultHandler();
         
         const bool isAccelerator(HIWORD(wParam) != 0);
-        switch (id)
-        {
-        default:
-            throw WindowsError("Unrecognised "s + (isAccelerator ? "accelerator"s : "menu"s) + " command identifier: "s + std::to_string(id));
+        if (!isAccelerator)
+            throw WindowsError("Received menu command in WM_COMMAND message");
 
-        case Menu::menu.open.menuId:
-        {
-            // GetOpenFileName reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646927
-            // CommDlgExtendedError: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646916
-
-            wchar_t filepath[0x100];
-            filepath[0] = L'\0';
-
-            OPENFILENAME ofn{};
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner = window;
-            ofn.lpstrFilter =
-                L"ROM files\0*.abg;*.gba;*.smc;*.sfc;\0"
-                L"GBA ROM files\0*.abg;*.gba;\0"
-                L"SNES ROM files\0*.smc;*.sfc;\0"
-                L"All files\0*\0";
-
-            ofn.lpstrFile = std::data(filepath);
-            ofn.nMaxFile = static_cast<unsigned long>(std::size(filepath));
-            /*
-            // Modern dialog
-            ofn.Flags = OFN_FILEMUSTEXIST;
-            /*/
-            // Classic dialog, but verifies ROMs
-            ofn.Flags = OFN_FILEMUSTEXIST | OFN_ENABLEHOOK | OFN_EXPLORER | OFN_ENABLESIZING;
-            ofn.lpfnHook = openRomHookPrecedure;
-            //*/
-            if (!GetOpenFileName(&ofn))
-            {
-                unsigned long error(CommDlgExtendedError());
-                if (error)
-                    throw CommonDialogError(error);
-
-                // Cancelled
-                break;
-            }
-
-            try
-            {
-                Windows::p_windows->config.addRecentFile(filepath);
-                Windows::p_windows->config.save();
-            }
-            catch (const std::exception& e)
-            {
-                DebugFile(DebugFile::error) << LOG_INFO "Failed to add and save file to config: "s << e.what() << '\n';
-            }
-
-            try
-            {
-                Windows::p_windows->p_rom = Rom::loadRom(filepath);
-            }
-            catch (const std::exception& e)
-            {
-                Windows::p_windows->error(toWstring(e.what()));
-            }
-            
-            break;
-        }
-
-        case Menu::menu.about.menuId:
-        {
-            // DialogBox reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645452
-            // Can use CreateDialog for a modeless version
-            const std::intptr_t dialogRet(DialogBox(nullptr, MAKEINTRESOURCE(IDD_ABOUTBOX), window, aboutPrecedure));
-            if (dialogRet == 0 || dialogRet == -1)
-                throw WindowsError("Failed to open about dialog box");
-
-            break;
-        }
-
-        case Menu::menu.exit.menuId:
-        {
-            // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
-            if (!DestroyWindow(window))
-                throw WindowsError("Failed to destroy window on exit");
-
-            break;
-        }
-        }
+        p_windows->handleCommand(id, isAccelerator);
 
         break;
     }
@@ -548,7 +468,7 @@ try
         // PostQuitMessage reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644945
         try
         {
-            //Windows::p_windows->config.save();
+            //p_windows->config.save();
         }
         catch (const std::exception& e)
         {
@@ -568,7 +488,7 @@ try
         // GetItemMenuCount reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647978
 
         const HMENU menu(reinterpret_cast<HMENU>(wParam));
-        const unsigned superMenuIndex(LOWORD(lParam));
+        const unsigned short superMenuIndex(LOWORD(lParam));
         const bool isWindowMenu(HIWORD(lParam));
 
         if (isWindowMenu)
@@ -619,6 +539,47 @@ try
         break;
     }
 
+    // WM_MENUCOMMAND reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647603
+    case WM_MENUCOMMAND:
+    {
+        // MENUITEMINFO reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647578
+        // GetMenuItemInfo reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647980
+
+        const unsigned menuIndex(wParam);
+        const HMENU menu(reinterpret_cast<HMENU>(lParam));
+
+        MENUITEMINFO recentSubmenuInfo{};
+        recentSubmenuInfo.cbSize = sizeof(recentSubmenuInfo);
+        recentSubmenuInfo.fMask  = MIIM_SUBMENU;
+        if (!GetMenuItemInfo(GetMenu(window), Menu::menu.recent.item.menuId, MF_BYCOMMAND, &recentSubmenuInfo))
+            throw WindowsError(LOG_INFO "Failed to get recent submenu item info"s);
+
+        MENUITEMINFO menuItemInfo{};
+        menuItemInfo.cbSize = sizeof(menuItemInfo);
+        if (menu == recentSubmenuInfo.hSubMenu)
+        {
+            menuItemInfo.fMask = MIIM_STRING;
+            if (!GetMenuItemInfo(menu, menuIndex, MF_BYPOSITION, &menuItemInfo))
+                throw WindowsError(LOG_INFO "Failed to get menu item info"s);
+
+            std::wstring filepath(menuItemInfo.cch + 1, L'\0');
+            menuItemInfo.dwTypeData = std::data(filepath);
+            ++menuItemInfo.cch;
+            if (!GetMenuItemInfo(menu, menuIndex, MF_BYPOSITION, &menuItemInfo))
+                throw WindowsError(LOG_INFO "Failed to get menu item info"s);
+
+            p_windows->openRom(filepath);
+
+            break;
+        }
+
+        menuItemInfo.fMask = MIIM_ID;
+        if (!GetMenuItemInfo(menu, menuIndex, MF_BYPOSITION, &menuItemInfo))
+            throw WindowsError(LOG_INFO "Failed to get menu item info"s);
+
+        p_windows->handleCommand(menuItemInfo.wID, false);
+    }
+
     // WM_PAINT reference: https://msdn.microsoft.com/en-us/library/dd145213
     case WM_PAINT:
     {
@@ -634,12 +595,12 @@ try
             {
                 EndPaint(window, &ps);
             });
-            const std::unique_ptr<std::remove_pointer_t<HDC>, decltype(endPaint)> displayContext(BeginPaint(window, &ps), endPaint);
-            if (!displayContext)
+            const std::unique_ptr<std::remove_pointer_t<HDC>, decltype(endPaint)> p_displayContext(BeginPaint(window, &ps), endPaint);
+            if (!p_displayContext)
                 throw WindowsError("Failed to get display device context from BeginPaint");
 
             const std::wstring displayText(L"Hello, Windows!");
-            if (!TextOut(displayContext.get(), 0, 0, std::data(displayText), static_cast<int>(std::size(displayText))))
+            if (!TextOut(p_displayContext.get(), 0, 0, std::data(displayText), static_cast<int>(std::size(displayText))))
                 throw WindowsError("Failed to display text");
         }
 
@@ -654,6 +615,109 @@ catch (const std::exception& e)
     DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
     return DefWindowProc(window, message, wParam, lParam);
 }
+
+void Windows::handleCommand(unsigned int id, bool isAccelerator)
+try
+{
+    switch (id)
+    {
+        default:
+            throw WindowsError("Unrecognised "s + (isAccelerator ? "accelerator"s : "menu"s) + " command identifier: "s + std::to_string(id));
+
+        case Menu::menu.open.menuId:
+        {
+            // GetOpenFileName reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646927
+            // CommDlgExtendedError: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646916
+
+            wchar_t filepath[0x100];
+            filepath[0] = L'\0';
+
+            OPENFILENAME ofn{};
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = window;
+            ofn.lpstrFilter =
+                L"ROM files\0*.abg;*.gba;*.smc;*.sfc;\0"
+                L"GBA ROM files\0*.abg;*.gba;\0"
+                L"SNES ROM files\0*.smc;*.sfc;\0"
+                L"All files\0*\0";
+
+            ofn.lpstrFile = std::data(filepath);
+            ofn.nMaxFile = static_cast<unsigned long>(std::size(filepath));
+            /*
+            // Modern dialog
+            ofn.Flags = OFN_FILEMUSTEXIST;
+            /*/
+            // Classic dialog, but verifies ROMs
+            ofn.Flags = OFN_FILEMUSTEXIST | OFN_ENABLEHOOK | OFN_EXPLORER | OFN_ENABLESIZING;
+            ofn.lpfnHook = openRomHookProcedure;
+            //*/
+            if (!GetOpenFileName(&ofn))
+            {
+                unsigned long error(CommDlgExtendedError());
+                if (error)
+                    throw CommonDialogError(error);
+
+                // Cancelled
+                break;
+            }
+
+            openRom(filepath);
+
+            break;
+        }
+
+        case Menu::menu.about.menuId:
+        {
+            // DialogBox reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645452
+            // Can use CreateDialog for a modeless version
+            const std::intptr_t dialogRet(DialogBox(nullptr, MAKEINTRESOURCE(IDD_ABOUTBOX), window, aboutProcedure));
+            if (dialogRet == 0 || dialogRet == -1)
+                throw WindowsError("Failed to open about dialog box");
+
+            break;
+        }
+
+        case Menu::menu.exit.menuId:
+        {
+            // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
+            if (!DestroyWindow(window))
+                throw WindowsError("Failed to destroy window on exit");
+
+            break;
+        }
+    }
+}
+LOG_RETHROW
+
+void Windows::openRom(std::filesystem::path filepath)
+try
+{
+    try
+    {
+        p_rom = Rom::loadRom(filepath);
+    }
+    catch (const std::exception& e)
+    {
+        error(e.what());
+        throw;
+    }
+
+    try
+    {
+        config.addRecentFile(filepath);
+        config.save();
+    }
+    catch (const std::exception& e)
+    {
+        DebugFile(DebugFile::error) << LOG_INFO "Failed to add and save file to config: "s << e.what() << '\n';
+    }
+
+    // Load room data / whatever other tool data
+    // Create child windows
+    // Level view, tile table, plaintext notes, room/area selector, other tools that change the level view (tileset selector, room fx)
+    createChildWindows();
+}
+LOG_RETHROW
 
 long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e) noexcept
 {
@@ -861,7 +925,7 @@ try
     WNDCLASSEXW wcex{};
     wcex.cbSize = sizeof(wcex);
     wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
-    wcex.lpfnWndProc = windowPrecedure;
+    wcex.lpfnWndProc = windowProcedure;
     wcex.hInstance = instance;
     wcex.hIcon = static_cast<HICON>(LoadImage(instance, MAKEINTRESOURCE(IDI_METROIDLEVELEDITOR), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
     if (!wcex.hIcon)
@@ -872,7 +936,7 @@ try
         throw WindowsError("Failed to load cursor");
 
     wcex.hbrBackground = CreateSolidBrush(0x000000);
-    if (!wcex.hCursor)
+    if (!wcex.hbrBackground)
         throw WindowsError("Failed to create background brush");
 
     wcex.lpszClassName = className;
@@ -880,7 +944,7 @@ try
     if (!wcex.hIconSm)
         throw WindowsError("Failed to load small icon");
 
-    ATOM&& registeredClass(RegisterClassEx(&wcex));
+    ATOM registeredClass(RegisterClassEx(&wcex));
     if (!registeredClass)
         throw WindowsError("Failed to register main window class");
 }
@@ -907,8 +971,15 @@ try
     if (!menu)
         throw WindowsError("Failed to load menu");
 
+    MENUINFO menuInfo{};
+    menuInfo.cbSize = sizeof(menuInfo);
+    menuInfo.fMask = MIM_STYLE;
+    menuInfo.dwStyle = MNS_NOTIFYBYPOS;
+    if (!SetMenuInfo(menu, &menuInfo))
+        throw WindowsError("Failed to set menu info");
+
     void* const param{};
-    HWND window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windowParent, menu, instance, param);
+    window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windowParent, menu, instance, param);
     if (!window)
         throw WindowsError("Failed to create main window");
 }
@@ -959,5 +1030,148 @@ try
     // MessageBox reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645505
     if (!MessageBox(nullptr, std::data(errorText), nullptr, MB_ICONERROR))
         throw WindowsError("Failed to error message box"s);
+}
+LOG_RETHROW
+
+void Windows::error(const std::string& errorText) const
+try
+{
+    error(toWstring(errorText));
+}
+LOG_RETHROW
+
+void Windows::createChildWindows()
+{
+    // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
+    // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
+    if (!p_windows->p_levelView)
+        p_windows->p_levelView = std::make_unique<LevelView>(p_windows->instance);
+    else
+        p_windows->p_levelView->destroy();
+
+    RECT rect;
+    if (!GetClientRect(window, &rect))
+        throw WindowsError("Failed to get size of client area of main window");
+
+    p_windows->p_levelView->create(window, 0, 0, rect.right, rect.bottom);
+}
+
+void Windows::destroyChildWindows()
+{
+    if (p_windows->p_levelView)
+        p_windows->p_levelView->destroy();
+}
+
+
+LRESULT CALLBACK Windows::LevelView::windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
+try
+{
+    // Window procedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632593
+
+    const auto defaultHandler([&]()
+    {
+        return DefWindowProc(window, message, wParam, lParam);
+    });
+
+    switch (message)
+    {
+    default:
+        return defaultHandler();
+
+    // WM_PAINT reference: https://msdn.microsoft.com/en-us/library/dd145213
+    case WM_PAINT:
+    {
+        // GetUpdateRect reference: https://msdn.microsoft.com/en-us/library/dd144943
+        RECT updateRect;
+        BOOL notEmpty(GetUpdateRect(window, &updateRect, false));
+        if (notEmpty)
+        {
+            // BeginPaint reference: https://msdn.microsoft.com/en-us/library/dd183362
+            // EndPaint reference: https://msdn.microsoft.com/en-us/library/dd162598
+            PAINTSTRUCT ps;
+            const auto endPaint([&](HDC)
+            {
+                EndPaint(window, &ps);
+            });
+            const std::unique_ptr<std::remove_pointer_t<HDC>, decltype(endPaint)> p_displayContext(BeginPaint(window, &ps), endPaint);
+            if (!p_displayContext)
+                throw WindowsError("Failed to get display device context from BeginPaint");
+
+            const std::wstring displayText(L"Hello, child window!");
+            if (!TextOut(p_displayContext.get(), 0, 0, std::data(displayText), static_cast<int>(std::size(displayText))))
+                throw WindowsError("Failed to display text");
+        }
+
+        break;
+    }
+    }
+
+    return 0;
+}
+catch (const std::exception& e)
+{
+    DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
+    return DefWindowProc(window, message, wParam, lParam);
+}
+
+
+Windows::LevelView::LevelView(Windows& windows)
+try
+    : windows(windows)
+{
+    // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
+    // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
+    // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
+    // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
+    // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
+
+    p_levelView = this;
+    
+    WNDCLASSEXW wcex{};
+    wcex.cbSize = sizeof(wcex);
+    wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
+    wcex.lpfnWndProc = windowProcedure;
+    wcex.hInstance = windows.instance;
+    wcex.hbrBackground = CreateSolidBrush(0x000000);
+    if (!wcex.hbrBackground)
+        throw WindowsError("Failed to create background brush");
+
+    wcex.lpszClassName = className;
+    ATOM registeredClass(RegisterClassEx(&wcex));
+    if (!registeredClass)
+        throw WindowsError("Failed to register level view window class");
+}
+LOG_RETHROW
+
+void Windows::LevelView::create(int x, int y, int width, int height)
+try
+{
+    // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
+    // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
+    // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
+
+    const unsigned long exStyle(WS_EX_WINDOWEDGE);
+    const wchar_t* const titleString{};
+    const unsigned long style(WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL);
+    HMENU const menu{};
+    void* const param{};
+    window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windows.window, menu, windows.instance, param);
+    if (!window)
+        throw WindowsError("Failed to create level view window");
+}
+LOG_RETHROW
+
+void Windows::LevelView::destroy()
+try
+{
+    // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
+
+    if (!window)
+        return;
+
+    if (!DestroyWindow(window))
+        throw WindowsError("Failed to destroy level view window");
+
+    window = nullptr;
 }
 LOG_RETHROW

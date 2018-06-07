@@ -17,6 +17,5 @@ Sm::Sm(std::filesystem::path filepath) try
             throw std::runtime_error("PAL Super Metroid not supported"s);
         else
             throw std::runtime_error("Invalid Super Metroid ROM (incorrect header region)"s);
-
 }
 LOG_RETHROW

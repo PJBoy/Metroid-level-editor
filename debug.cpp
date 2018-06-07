@@ -20,7 +20,7 @@ struct FilepathHash
     }
 };
 
-DebugFile::DebugFile(std::filesystem::path filename)
+DebugFile::DebugFile(std::filesystem::path filename) noexcept
 try
 {
     const std::filesystem::path filepath(dataDirectory / filename);
@@ -40,9 +40,9 @@ catch (const std::exception&)
     // There's nothing I can do to handle this exception; but catch it anyways, because this is a non-fatal error
 }
 
-void DebugFile::init(std::filesystem::path dataDirectory_in)
+void DebugFile::init(std::filesystem::path dataDirectory_in) noexcept
 {
-    dataDirectory = dataDirectory_in;
+    dataDirectory = std::move(dataDirectory_in);
 }
 
 void DebugFile::writeImage(const uint16_t* data, uint32_t width, uint32_t height)

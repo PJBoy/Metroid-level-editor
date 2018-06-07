@@ -5,6 +5,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <string>
 
 #define LOG_INFO __FILE__ ":" APPLY(STRINGIFY, __LINE__) " - "s
@@ -26,8 +27,16 @@ public:
         warning{"debug_warning.txt"s},
         info{"debug_info.txt"s};
 
-    DebugFile(std::filesystem::path filename);
+    DebugFile(std::filesystem::path filename) noexcept;
 
-    static void init(std::filesystem::path dataDirectory_in);
+    template<typename T>
+    DebugFile& operator<<(const T& v)
+    {
+        std::cout << v;
+        *static_cast<std::ofstream*>(this) << v;
+        return *this;
+    }
+
+    static void init(std::filesystem::path dataDirectory_in) noexcept;
     void writeImage(const uint16_t* data, uint32_t width, uint32_t height);
 };
