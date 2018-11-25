@@ -28,11 +28,11 @@ try
     // If first use of file, clear it, otherwise insert spaces
     static std::unordered_set<std::filesystem::path, FilepathHash> initialised;
     if (initialised.insert(filepath).second)
-        open(std::move(filepath), trunc);
+        this->open(filepath, trunc);
     else
-        open(std::move(filepath), app | ate);
+        this->open(filepath, app | ate);
 
-    const std::time_t time(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    const std::time_t time(std::time(nullptr));
     *this << std::put_time(std::gmtime(&time), "%c") << " - "s;
 }
 catch (const std::exception&)

@@ -33,9 +33,6 @@
     <ClInclude Include="config.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="iterator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="rom.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -49,6 +46,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="mzm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="matrix.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="byte_cast_iterator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

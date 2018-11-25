@@ -8,29 +8,88 @@
 
 class Gba : public Rom
 {
-protected:
+public:
     using byte_t     = std::uint8_t;
     using halfword_t = std::uint16_t;
     using word_t     = std::uint32_t;
 
-    class Pointer : public Wrapper<word_t>
-    {
-    public:
-        using Wrapper::Wrapper;
-        using Wrapper::operator=;
 
-        inline operator word_t() const
+protected:
+    struct Pointer
+    {
+        word_t v{};
+
+    #define operators(op) \
+        constexpr Pointer operator##op(Pointer rhs) \
+        { \
+            return {v op word_t(rhs.v)}; \
+        } \
+    \
+        template<typename U> \
+        constexpr friend Pointer operator##op(Pointer lhs, U rhs) \
+        { \
+            return {lhs.v op word_t(rhs)}; \
+        } \
+    \
+        template<typename U> \
+        constexpr friend Pointer operator##op(U lhs, Pointer rhs) \
+        { \
+            return {word_t(lhs) op rhs.v}; \
+        } \
+    \
+        template<typename U> \
+        constexpr Pointer& operator##op##=(U rhs) \
+        { \
+            return v op##= rhs, *this; \
+        } \
+
+        operators(+)
+        operators(-)
+        operators(|)
+        operators(&)
+    #undef operators
+
+    #define operator(op) \
+        constexpr bool operator##op(Pointer rhs) \
+        { \
+            return v op rhs.v; \
+        } \
+
+        operator(<)
+        operator(>)
+        operator(<=)
+        operator(>=)
+        operator(==)
+        operator(!=)
+    #undef operator
+
+        constexpr Pointer& operator++()
         {
-            return v - 0x800'0000;
+            return ++v, *this;
+        }
+
+        constexpr Pointer& operator--()
+        {
+            return --v, *this;
+        }
+
+        constexpr Pointer operator++(int)
+        {
+            return ++*this - 1;
+        }
+
+        constexpr Pointer operator--(int)
+        {
+            return --*this + 1;
         }
     };
 
     explicit Gba(std::filesystem::path filepath);
 
-    friend Pointer operator"" _gba(unsigned long long pointer);
+    constexpr friend Pointer operator"" _gba(unsigned long long pointer);
 };
 
-inline Gba::Pointer operator"" _gba(unsigned long long pointer)
+constexpr Gba::Pointer operator"" _gba(unsigned long long pointer)
 {
-    return Gba::Pointer(Gba::word_t(pointer));
+    return {Gba::word_t(pointer)};
 }

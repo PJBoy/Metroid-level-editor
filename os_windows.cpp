@@ -4,6 +4,7 @@
 // Windows API reference - data types: https://msdn.microsoft.com/en-us/library/aa383751
 // Other Windows API reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ff818516
 // Window article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632598
+// Controls reference: https://docs.microsoft.com/en-us/windows/desktop/controls/window-controls
     
 #include "os_windows.h"
 
@@ -12,8 +13,10 @@
 
 #include "global.h"
 
-#include <commdlg.h>
+#include <cairomm/win32_surface.h>
+
 #include <cderr.h>
+#include <commdlg.h>
 
 #include <codecvt>
 #include <cstdint>
@@ -354,7 +357,7 @@ try
         switch (id)
         {
         default:
-            throw WindowsError("Unrecognised command identifier: " + std::to_string(id));
+            throw WindowsError(LOG_INFO "Unrecognised command identifier: " + std::to_string(id));
 
         case IDOK:
         case IDCANCEL:
@@ -362,7 +365,7 @@ try
             // EndDialog reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645472
             const std::intptr_t ret(id);
             if (!EndDialog(window, ret))
-                throw WindowsError("Failed to close about dialog");
+                throw WindowsError(LOG_INFO "Failed to close about dialog");
 
             break;
         }
@@ -413,7 +416,7 @@ try
 
         SetLastError(0);
         if (!SetWindowLongPtr(window, DWLP_MSGRESULT, ~0) && GetLastError())
-            throw WindowsError("Failed to reject file after failing ROM verification"s);
+            throw WindowsError(LOG_INFO "Failed to reject file after failing ROM verification"s);
 
         p_windows->error(L"Not a valid ROM");
 
@@ -455,7 +458,7 @@ try
         
         const bool isAccelerator(HIWORD(wParam) != 0);
         if (!isAccelerator)
-            throw WindowsError("Received menu command in WM_COMMAND message");
+            throw WindowsError(LOG_INFO "Received menu command in WM_COMMAND message");
 
         p_windows->handleCommand(id, isAccelerator);
 
@@ -545,7 +548,7 @@ try
         // MENUITEMINFO reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647578
         // GetMenuItemInfo reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms647980
 
-        const unsigned menuIndex(wParam);
+        const unsigned menuIndex(static_cast<unsigned>(wParam));
         const HMENU menu(reinterpret_cast<HMENU>(lParam));
 
         MENUITEMINFO recentSubmenuInfo{};
@@ -580,6 +583,60 @@ try
         p_windows->handleCommand(menuItemInfo.wID, false);
     }
 
+    // WM_NOTIFY reference: https://docs.microsoft.com/en-us/windows/desktop/controls/wm-notify
+    case WM_NOTIFY:
+    {
+        // NMHDR reference: https://docs.microsoft.com/en-us/windows/desktop/api/richedit/ns-richedit-_nmhdr
+
+        const NMHDR* const p_nmhdr(reinterpret_cast<NMHDR*>(lParam));
+        switch (p_nmhdr->code)
+        {
+        default:
+            return defaultHandler();
+
+        case TVN_SELCHANGED:
+        {
+            // TVN_SELCHANGED reference: https://docs.microsoft.com/en-us/windows/desktop/controls/tvn-selchanged
+            // NMTREEVIEW reference: https://docs.microsoft.com/en-us/windows/desktop/api/Commctrl/ns-commctrl-tagnmtreeviewa
+            // TreeView_GetParent reference: https://docs.microsoft.com/en-us/windows/desktop/api/Commctrl/nf-commctrl-treeview_getparent
+            // TreeView_GetItem reference: https://docs.microsoft.com/en-us/windows/desktop/api/commctrl/nf-commctrl-treeview_getitem
+            // TVITEMEX reference: https://docs.microsoft.com/en-us/windows/desktop/api/Commctrl/ns-commctrl-tagtvitemexa
+            // InvalidateRect reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-invalidaterect
+
+            const NMTREEVIEW* const p_treeview(reinterpret_cast<const NMTREEVIEW*>(p_nmhdr));
+            if (p_nmhdr->hwndFrom != p_windows->p_roomSelectorTree->window)
+                throw std::runtime_error(LOG_INFO "Unknown tree view handle"s);
+
+            TVITEMEX item{};
+            item.mask = TVIF_CHILDREN | TVIF_HANDLE;
+            item.hItem = p_treeview->itemNew.hItem;
+            if (!TreeView_GetItem(p_windows->p_roomSelectorTree->window, &item))
+                throw WindowsError(LOG_INFO "Failed to get tree view item"s);
+
+            // Only processing leaf nodes
+            if (item.cChildren != 0)
+                return defaultHandler();
+
+            std::vector<long> ids;
+            for (HTREEITEM hItem(p_treeview->itemNew.hItem); hItem; hItem = TreeView_GetParent(p_windows->p_roomSelectorTree->window, hItem))
+            {
+                TVITEMEX item{};
+                item.mask = TVIF_PARAM | TVIF_HANDLE;
+                item.hItem = hItem;
+                if (!TreeView_GetItem(p_windows->p_roomSelectorTree->window, &item))
+                    throw WindowsError(LOG_INFO "Failed to get tree view item"s);
+
+                ids.push_back(long(item.lParam));
+            }
+
+            std::reverse(std::begin(ids), std::end(ids));
+            p_windows->p_rom->loadLevelData(std::move(ids));
+            if (!InvalidateRect(p_windows->p_levelView->window, nullptr, true))
+                throw WindowsError(LOG_INFO "Failed to invalidate level view window"s);
+        }
+        }
+    }
+
     // WM_PAINT reference: https://msdn.microsoft.com/en-us/library/dd145213
     case WM_PAINT:
     {
@@ -595,13 +652,13 @@ try
             {
                 EndPaint(window, &ps);
             });
-            const std::unique_ptr<std::remove_pointer_t<HDC>, decltype(endPaint)> p_displayContext(BeginPaint(window, &ps), endPaint);
+            const std::unique_ptr p_displayContext(makeUniquePtr(BeginPaint(window, &ps), endPaint));
             if (!p_displayContext)
-                throw WindowsError("Failed to get display device context from BeginPaint");
+                throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint");
 
             const std::wstring displayText(L"Hello, Windows!");
             if (!TextOut(p_displayContext.get(), 0, 0, std::data(displayText), static_cast<int>(std::size(displayText))))
-                throw WindowsError("Failed to display text");
+                throw WindowsError(LOG_INFO "Failed to display text");
         }
 
         break;
@@ -622,7 +679,7 @@ try
     switch (id)
     {
         default:
-            throw WindowsError("Unrecognised "s + (isAccelerator ? "accelerator"s : "menu"s) + " command identifier: "s + std::to_string(id));
+            throw WindowsError(LOG_INFO "Unrecognised "s + (isAccelerator ? "accelerator"s : "menu"s) + " command identifier: "s + std::to_string(id));
 
         case Menu::menu.open.menuId:
         {
@@ -672,7 +729,7 @@ try
             // Can use CreateDialog for a modeless version
             const std::intptr_t dialogRet(DialogBox(nullptr, MAKEINTRESOURCE(IDD_ABOUTBOX), window, aboutProcedure));
             if (dialogRet == 0 || dialogRet == -1)
-                throw WindowsError("Failed to open about dialog box");
+                throw WindowsError(LOG_INFO "Failed to open about dialog box");
 
             break;
         }
@@ -681,7 +738,7 @@ try
         {
             // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
             if (!DestroyWindow(window))
-                throw WindowsError("Failed to destroy window on exit");
+                throw WindowsError(LOG_INFO "Failed to destroy window on exit");
 
             break;
         }
@@ -885,11 +942,11 @@ try
 
     // Set Windows exception handler
     if (!AddVectoredExceptionHandler(~0ul, vectoredHandler))
-        throw WindowsError("Could not add vectored exception handler");
+        throw WindowsError(LOG_INFO "Could not add vectored exception handler");
 
     // Create console window
     if (!AllocConsole())
-        throw WindowsError("Failed to allocate console");
+        throw WindowsError(LOG_INFO "Failed to allocate console");
 
     if (!std::freopen("CONIN$", "r", stdin))
         throw std::runtime_error("Failed to redirect stdin");
@@ -908,7 +965,7 @@ try
     // Load keyboard shortcuts
     accelerators = LoadAccelerators(instance, MAKEINTRESOURCE(IDC_METROIDLEVELEDITOR));
     if (!accelerators)
-        throw WindowsError("Failed to load acclerators");
+        throw WindowsError(LOG_INFO "Failed to load acclerators");
 }
 LOG_RETHROW
 
@@ -929,24 +986,24 @@ try
     wcex.hInstance = instance;
     wcex.hIcon = static_cast<HICON>(LoadImage(instance, MAKEINTRESOURCE(IDI_METROIDLEVELEDITOR), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
     if (!wcex.hIcon)
-        throw WindowsError("Failed to load icon");
+        throw WindowsError(LOG_INFO "Failed to load icon");
 
     wcex.hCursor = static_cast<HCURSOR>(LoadImage(nullptr, MAKEINTRESOURCE(OCR_NORMAL), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED));
     if (!wcex.hCursor)
-        throw WindowsError("Failed to load cursor");
+        throw WindowsError(LOG_INFO "Failed to load cursor");
 
     wcex.hbrBackground = CreateSolidBrush(0x000000);
     if (!wcex.hbrBackground)
-        throw WindowsError("Failed to create background brush");
+        throw WindowsError(LOG_INFO "Failed to create background brush");
 
     wcex.lpszClassName = className;
     wcex.hIconSm = static_cast<HICON>(LoadImage(instance, MAKEINTRESOURCE(IDI_SMALL), IMAGE_ICON, SM_CXSMICON, SM_CYSMICON, LR_DEFAULTCOLOR));
     if (!wcex.hIconSm)
-        throw WindowsError("Failed to load small icon");
+        throw WindowsError(LOG_INFO "Failed to load small icon");
 
     ATOM registeredClass(RegisterClassEx(&wcex));
     if (!registeredClass)
-        throw WindowsError("Failed to register main window class");
+        throw WindowsError(LOG_INFO "Failed to register main window class");
 }
 LOG_RETHROW
 
@@ -969,19 +1026,19 @@ try
     HWND const windowParent{};
     HMENU const menu(LoadMenuIndirect(&Menu::menu));
     if (!menu)
-        throw WindowsError("Failed to load menu");
+        throw WindowsError(LOG_INFO "Failed to load menu");
 
     MENUINFO menuInfo{};
     menuInfo.cbSize = sizeof(menuInfo);
     menuInfo.fMask = MIM_STYLE;
     menuInfo.dwStyle = MNS_NOTIFYBYPOS;
     if (!SetMenuInfo(menu, &menuInfo))
-        throw WindowsError("Failed to set menu info");
+        throw WindowsError(LOG_INFO "Failed to set menu info");
 
     void* const param{};
     window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windowParent, menu, instance, param);
     if (!window)
-        throw WindowsError("Failed to create main window");
+        throw WindowsError(LOG_INFO "Failed to create main window");
 }
 LOG_RETHROW
 
@@ -998,7 +1055,7 @@ try
         MSG msg;
         const BOOL isNotQuit(GetMessage(&msg, nullptr, 0, 0));
         if (isNotQuit == -1)
-            throw WindowsError("Failed to get message");
+            throw WindowsError(LOG_INFO "Failed to get message");
         if (!isNotQuit)
             return static_cast<int>(msg.wParam);
 
@@ -1029,7 +1086,7 @@ try
 {
     // MessageBox reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645505
     if (!MessageBox(nullptr, std::data(errorText), nullptr, MB_ICONERROR))
-        throw WindowsError("Failed to error message box"s);
+        throw WindowsError(LOG_INFO "Failed to error message box"s);
 }
 LOG_RETHROW
 
@@ -1043,23 +1100,42 @@ LOG_RETHROW
 void Windows::createChildWindows()
 {
     // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
+    // INITCOMMONCONTROLSEX reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/ns-commctrl-taginitcommoncontrolsex
     // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
-    if (!p_windows->p_levelView)
-        p_windows->p_levelView = std::make_unique<LevelView>(p_windows->instance);
-    else
-        p_windows->p_levelView->destroy();
+    // InitCommonControlsEx reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/nf-commctrl-initcommoncontrolsex
+    
+    INITCOMMONCONTROLSEX iccs{};
+    iccs.dwSize = sizeof(iccs);
+    iccs.dwICC = ICC_TREEVIEW_CLASSES;
+    if (!InitCommonControlsEx(&iccs))
+        throw std::runtime_error("Could not initialise common controls"s);
 
     RECT rect;
     if (!GetClientRect(window, &rect))
-        throw WindowsError("Failed to get size of client area of main window");
+        throw WindowsError(LOG_INFO "Failed to get size of client area of main window"s);
 
-    p_windows->p_levelView->create(window, 0, 0, rect.right, rect.bottom);
+    if (!p_levelView)
+        p_levelView = std::make_unique<LevelView>(*this);
+    else
+        p_levelView->destroy();
+
+    p_levelView->create(0, 0, rect.right * 2 / 3, rect.bottom);
+
+    if (!p_roomSelectorTree)
+        p_roomSelectorTree = std::make_unique<RoomSelectorTree>(*this);
+    else
+        p_roomSelectorTree->destroy();
+
+    p_roomSelectorTree->create(rect.right * 2 / 3, 0, rect.right / 3, rect.bottom);
 }
 
 void Windows::destroyChildWindows()
 {
     if (p_windows->p_levelView)
         p_windows->p_levelView->destroy();
+
+    if (p_windows->p_roomSelectorTree)
+        p_windows->p_roomSelectorTree->destroy();
 }
 
 
@@ -1093,13 +1169,11 @@ try
             {
                 EndPaint(window, &ps);
             });
-            const std::unique_ptr<std::remove_pointer_t<HDC>, decltype(endPaint)> p_displayContext(BeginPaint(window, &ps), endPaint);
+            const std::unique_ptr p_displayContext(makeUniquePtr(BeginPaint(window, &ps), endPaint));
             if (!p_displayContext)
-                throw WindowsError("Failed to get display device context from BeginPaint");
+                throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint");
 
-            const std::wstring displayText(L"Hello, child window!");
-            if (!TextOut(p_displayContext.get(), 0, 0, std::data(displayText), static_cast<int>(std::size(displayText))))
-                throw WindowsError("Failed to display text");
+            p_windows->p_rom->drawLevelView(Cairo::Win32Surface::create(p_displayContext.get()));
         }
 
         break;
@@ -1134,12 +1208,12 @@ try
     wcex.hInstance = windows.instance;
     wcex.hbrBackground = CreateSolidBrush(0x000000);
     if (!wcex.hbrBackground)
-        throw WindowsError("Failed to create background brush");
+        throw WindowsError(LOG_INFO "Failed to create background brush");
 
     wcex.lpszClassName = className;
     ATOM registeredClass(RegisterClassEx(&wcex));
     if (!registeredClass)
-        throw WindowsError("Failed to register level view window class");
+        throw WindowsError(LOG_INFO "Failed to register level view window class");
 }
 LOG_RETHROW
 
@@ -1157,7 +1231,7 @@ try
     void* const param{};
     window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windows.window, menu, windows.instance, param);
     if (!window)
-        throw WindowsError("Failed to create level view window");
+        throw WindowsError(LOG_INFO "Failed to create level view window");
 }
 LOG_RETHROW
 
@@ -1170,7 +1244,70 @@ try
         return;
 
     if (!DestroyWindow(window))
-        throw WindowsError("Failed to destroy level view window");
+        throw WindowsError(LOG_INFO "Failed to destroy level view window");
+
+    window = nullptr;
+}
+LOG_RETHROW
+
+Windows::RoomSelectorTree::RoomSelectorTree(Windows& windows) noexcept
+    : windows(windows)
+{}
+
+void Windows::RoomSelectorTree::insertRoomList(const std::vector<Rom::RoomList>& roomLists, HTREEITEM parent = TVI_ROOT)
+try
+{
+    // TreeView_InsertItem reference: https://docs.microsoft.com/en-us/windows/desktop/api/Commctrl/nf-commctrl-treeview_insertitem
+    // TV_INSERTSTRUCT reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/ns-commctrl-tagtvinsertstructa
+
+    TV_INSERTSTRUCT is{};
+    is.hInsertAfter = TVI_LAST;
+    is.itemex.mask = TVIF_TEXT | TVIF_PARAM;
+    for (const Rom::RoomList& roomList : roomLists)
+    {
+        is.hParent = parent;
+        std::wstring text(toWstring(roomList.name));
+        is.itemex.pszText = std::data(text);
+        is.itemex.lParam = roomList.id;
+        HTREEITEM item(TreeView_InsertItem(window, &is));
+        if (!item)
+            throw WindowsError(LOG_INFO "Failed to insert item into room selector tree"s);
+
+        insertRoomList(roomList.subrooms, item);
+    }
+}
+LOG_RETHROW
+
+void Windows::RoomSelectorTree::create(int x, int y, int width, int height)
+try
+{
+    // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
+    // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
+
+    const unsigned long exStyle{};
+    const wchar_t* const className(WC_TREEVIEW);
+    const wchar_t* const titleString{};
+    const unsigned long style(WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL | TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT);
+    HMENU const menu{};
+    void* const param{};
+    window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windows.window, menu, windows.instance, param);
+    if (!window)
+        throw WindowsError(LOG_INFO "Failed to create room selector tree window"s);
+
+    insertRoomList(windows.p_rom->getRoomList());
+}
+LOG_RETHROW
+
+void Windows::RoomSelectorTree::destroy()
+try
+{
+    // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
+
+    if (!window)
+        return;
+
+    if (!DestroyWindow(window))
+        throw WindowsError(LOG_INFO "Failed to destroy room selector tree window");
 
     window = nullptr;
 }

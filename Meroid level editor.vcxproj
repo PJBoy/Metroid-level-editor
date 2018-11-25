@@ -101,13 +101,14 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
       <ConformanceMode>true</ConformanceMode>
-      <DisableSpecificWarnings>4458</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4458; 4554</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <LargeAddressAware>true</LargeAddressAware>
       <SetChecksum>false</SetChecksum>
+      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
       <Culture>0x0809</Culture>
@@ -131,13 +132,14 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
       <ConformanceMode>true</ConformanceMode>
-      <DisableSpecificWarnings>4458</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4458; 4554</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <LargeAddressAware>true</LargeAddressAware>
       <SetChecksum>false</SetChecksum>
+      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
       <Culture>0x0809</Culture>
@@ -160,7 +162,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ConformanceMode>true</ConformanceMode>
-      <DisableSpecificWarnings>4458</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4458; 4554</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -169,6 +171,7 @@
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <LargeAddressAware>true</LargeAddressAware>
       <SetChecksum>true</SetChecksum>
+      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
       <Culture>0x0809</Culture>
@@ -191,7 +194,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ConformanceMode>true</ConformanceMode>
-      <DisableSpecificWarnings>4458</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4458; 4554</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -200,17 +203,19 @@
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <LargeAddressAware>true</LargeAddressAware>
       <SetChecksum>true</SetChecksum>
+      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
       <Culture>0x0809</Culture>
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="byte_cast_iterator.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="debug.h" />
     <ClInclude Include="gba.h" />
     <ClInclude Include="global.h" />
-    <ClInclude Include="iterator.h" />
+    <ClInclude Include="matrix.h" />
     <ClInclude Include="mf.h" />
     <ClInclude Include="mzm.h" />
     <ClInclude Include="resource.h" />
