@@ -79,7 +79,7 @@ try
 }
 LOG_RETHROW
 
-void Rom::drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface) const
+void Rom::drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned, unsigned) const
 try
 {
     Cairo::RefPtr<Cairo::ImageSurface> p_tile(Cairo::ImageSurface::create(Cairo::Format::FORMAT_ARGB32, 32, 32));
@@ -97,6 +97,11 @@ try
 LOG_RETHROW
 
 auto Rom::getRoomList() const -> std::vector<RoomList>
+{
+    return {};
+}
+
+auto Rom::getLevelViewDimensions() const -> Dimensions
 {
     return {};
 }

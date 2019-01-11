@@ -24,7 +24,7 @@ try
 }
 LOG_RETHROW
 
-void Sm::drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface) const
+void Sm::drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const
 try
 {
     if (!p_level)
@@ -33,10 +33,15 @@ try
     Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_surface));
     //p_context->set_antialias(Cairo::Antialias::ANTIALIAS_NONE);
     //p_context->scale(0.5, 0.5);
-    p_context->set_source(p_level, 0, 0);
+    p_context->set_source(p_level, -signed(x * 16), -signed(y * 16));
     p_context->paint();
 }
 LOG_RETHROW
+
+auto Sm::getLevelViewDimensions() const -> Dimensions
+{
+    return {16, levelData.n_y * 0x10, levelData.n_x * 0x10};
+}
 
 auto Sm::getRoomList() const -> std::vector<RoomList>
 try

@@ -58,6 +58,12 @@ class Windows final : public Os
         *const titleString = L"Metroid editor",
         *const className = L"MetroidLevelEditor";
 
+    const inline static float
+        y_ratio_levelEditor{1},
+        x_ratio_levelEditor{2./3},
+        y_ratio_roomSelectorTree{1},
+        x_ratio_roomSelectorTree{1./3};
+
     // Variables //
     inline static Windows* p_windows; // Provides access to this global state from callback functions
     HINSTANCE instance; // Identifies the module (the executable)
@@ -76,6 +82,8 @@ class Windows final : public Os
     void destroyChildWindows();
     void handleCommand(unsigned int id, bool isAccelerator);
     void openRom(std::filesystem::path filepath);
+    void updateLevelViewScrollbarDimensions();
+
     static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
     static std::uintptr_t CALLBACK openRomHookProcedure(HWND window, unsigned message, std::uintptr_t, LONG_PTR lParam) noexcept;
 

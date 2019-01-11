@@ -594,9 +594,9 @@ try
         default:
             return defaultHandler();
 
+        // TVN_SELCHANGED reference: https://docs.microsoft.com/en-us/windows/desktop/controls/tvn-selchanged
         case TVN_SELCHANGED:
         {
-            // TVN_SELCHANGED reference: https://docs.microsoft.com/en-us/windows/desktop/controls/tvn-selchanged
             // NMTREEVIEW reference: https://docs.microsoft.com/en-us/windows/desktop/api/Commctrl/ns-commctrl-tagnmtreeviewa
             // TreeView_GetParent reference: https://docs.microsoft.com/en-us/windows/desktop/api/Commctrl/nf-commctrl-treeview_getparent
             // TreeView_GetItem reference: https://docs.microsoft.com/en-us/windows/desktop/api/commctrl/nf-commctrl-treeview_getitem
@@ -631,6 +631,7 @@ try
 
             std::reverse(std::begin(ids), std::end(ids));
             p_windows->p_rom->loadLevelData(std::move(ids));
+            p_windows->updateLevelViewScrollbarDimensions();
             if (!InvalidateRect(p_windows->p_levelView->window, nullptr, true))
                 throw WindowsError(LOG_INFO "Failed to invalidate level view window"s);
         }
@@ -672,109 +673,6 @@ catch (const std::exception& e)
     DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
     return DefWindowProc(window, message, wParam, lParam);
 }
-
-void Windows::handleCommand(unsigned int id, bool isAccelerator)
-try
-{
-    switch (id)
-    {
-        default:
-            throw WindowsError(LOG_INFO "Unrecognised "s + (isAccelerator ? "accelerator"s : "menu"s) + " command identifier: "s + std::to_string(id));
-
-        case Menu::menu.open.menuId:
-        {
-            // GetOpenFileName reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646927
-            // CommDlgExtendedError: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646916
-
-            wchar_t filepath[0x100];
-            filepath[0] = L'\0';
-
-            OPENFILENAME ofn{};
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner = window;
-            ofn.lpstrFilter =
-                L"ROM files\0*.abg;*.gba;*.smc;*.sfc;\0"
-                L"GBA ROM files\0*.abg;*.gba;\0"
-                L"SNES ROM files\0*.smc;*.sfc;\0"
-                L"All files\0*\0";
-
-            ofn.lpstrFile = std::data(filepath);
-            ofn.nMaxFile = static_cast<unsigned long>(std::size(filepath));
-            /*
-            // Modern dialog
-            ofn.Flags = OFN_FILEMUSTEXIST;
-            /*/
-            // Classic dialog, but verifies ROMs
-            ofn.Flags = OFN_FILEMUSTEXIST | OFN_ENABLEHOOK | OFN_EXPLORER | OFN_ENABLESIZING;
-            ofn.lpfnHook = openRomHookProcedure;
-            //*/
-            if (!GetOpenFileName(&ofn))
-            {
-                unsigned long error(CommDlgExtendedError());
-                if (error)
-                    throw CommonDialogError(error);
-
-                // Cancelled
-                break;
-            }
-
-            openRom(filepath);
-
-            break;
-        }
-
-        case Menu::menu.about.menuId:
-        {
-            // DialogBox reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645452
-            // Can use CreateDialog for a modeless version
-            const std::intptr_t dialogRet(DialogBox(nullptr, MAKEINTRESOURCE(IDD_ABOUTBOX), window, aboutProcedure));
-            if (dialogRet == 0 || dialogRet == -1)
-                throw WindowsError(LOG_INFO "Failed to open about dialog box");
-
-            break;
-        }
-
-        case Menu::menu.exit.menuId:
-        {
-            // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
-            if (!DestroyWindow(window))
-                throw WindowsError(LOG_INFO "Failed to destroy window on exit");
-
-            break;
-        }
-    }
-}
-LOG_RETHROW
-
-void Windows::openRom(std::filesystem::path filepath)
-try
-{
-    try
-    {
-        p_rom = Rom::loadRom(filepath);
-    }
-    catch (const std::exception& e)
-    {
-        error(e.what());
-        throw;
-    }
-
-    try
-    {
-        config.addRecentFile(filepath);
-        config.save();
-    }
-    catch (const std::exception& e)
-    {
-        DebugFile(DebugFile::error) << LOG_INFO "Failed to add and save file to config: "s << e.what() << '\n';
-    }
-
-    // Load room data / whatever other tool data
-    // Create child windows
-    // Level view, tile table, plaintext notes, room/area selector, other tools that change the level view (tileset selector, room fx)
-    createChildWindows();
-}
-LOG_RETHROW
 
 long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e) noexcept
 {
@@ -1098,6 +996,7 @@ try
 LOG_RETHROW
 
 void Windows::createChildWindows()
+try
 {
     // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
     // INITCOMMONCONTROLSEX reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/ns-commctrl-taginitcommoncontrolsex
@@ -1108,7 +1007,7 @@ void Windows::createChildWindows()
     iccs.dwSize = sizeof(iccs);
     iccs.dwICC = ICC_TREEVIEW_CLASSES;
     if (!InitCommonControlsEx(&iccs))
-        throw std::runtime_error("Could not initialise common controls"s);
+        throw std::runtime_error(LOG_INFO "Could not initialise common controls"s);
 
     RECT rect;
     if (!GetClientRect(window, &rect))
@@ -1119,15 +1018,16 @@ void Windows::createChildWindows()
     else
         p_levelView->destroy();
 
-    p_levelView->create(0, 0, rect.right * 2 / 3, rect.bottom);
+    p_levelView->create(0, 0, int(rect.right * x_ratio_levelEditor), int(rect.bottom * y_ratio_levelEditor));
 
     if (!p_roomSelectorTree)
         p_roomSelectorTree = std::make_unique<RoomSelectorTree>(*this);
     else
         p_roomSelectorTree->destroy();
 
-    p_roomSelectorTree->create(rect.right * 2 / 3, 0, rect.right / 3, rect.bottom);
+    p_roomSelectorTree->create(int(rect.right * x_ratio_levelEditor), 0, int(rect.right * x_ratio_roomSelectorTree), int(rect.bottom * y_ratio_roomSelectorTree));
 }
+LOG_RETHROW
 
 void Windows::destroyChildWindows()
 {
@@ -1138,6 +1038,138 @@ void Windows::destroyChildWindows()
         p_windows->p_roomSelectorTree->destroy();
 }
 
+void Windows::handleCommand(unsigned int id, bool isAccelerator)
+try
+{
+    switch (id)
+    {
+        default:
+            throw WindowsError(LOG_INFO "Unrecognised "s + (isAccelerator ? "accelerator"s : "menu"s) + " command identifier: "s + std::to_string(id));
+
+        case Menu::menu.open.menuId:
+        {
+            // GetOpenFileName reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646927
+            // CommDlgExtendedError: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646916
+
+            wchar_t filepath[0x100];
+            filepath[0] = L'\0';
+
+            OPENFILENAME ofn{};
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = window;
+            ofn.lpstrFilter =
+                L"ROM files\0*.abg;*.gba;*.smc;*.sfc;\0"
+                L"GBA ROM files\0*.abg;*.gba;\0"
+                L"SNES ROM files\0*.smc;*.sfc;\0"
+                L"All files\0*\0";
+
+            ofn.lpstrFile = std::data(filepath);
+            ofn.nMaxFile = static_cast<unsigned long>(std::size(filepath));
+            /*
+            // Modern dialog
+            ofn.Flags = OFN_FILEMUSTEXIST;
+            /*/
+            // Classic dialog, but verifies ROMs
+            ofn.Flags = OFN_FILEMUSTEXIST | OFN_ENABLEHOOK | OFN_EXPLORER | OFN_ENABLESIZING;
+            ofn.lpfnHook = openRomHookProcedure;
+            //*/
+            if (!GetOpenFileName(&ofn))
+            {
+                unsigned long error(CommDlgExtendedError());
+                if (error)
+                    throw CommonDialogError(error);
+
+                // Cancelled
+                break;
+            }
+
+            openRom(filepath);
+
+            break;
+        }
+
+        case Menu::menu.about.menuId:
+        {
+            // DialogBox reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645452
+            // Can use CreateDialog for a modeless version
+            const std::intptr_t dialogRet(DialogBox(nullptr, MAKEINTRESOURCE(IDD_ABOUTBOX), window, aboutProcedure));
+            if (dialogRet == 0 || dialogRet == -1)
+                throw WindowsError(LOG_INFO "Failed to open about dialog box");
+
+            break;
+        }
+
+        case Menu::menu.exit.menuId:
+        {
+            // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
+            if (!DestroyWindow(window))
+                throw WindowsError(LOG_INFO "Failed to destroy window on exit");
+
+            break;
+        }
+    }
+}
+LOG_RETHROW
+
+void Windows::openRom(std::filesystem::path filepath)
+try
+{
+    try
+    {
+        p_rom = Rom::loadRom(filepath);
+    }
+    catch (const std::exception& e)
+    {
+        error(e.what());
+        throw;
+    }
+
+    try
+    {
+        config.addRecentFile(filepath);
+        config.save();
+    }
+    catch (const std::exception& e)
+    {
+        DebugFile(DebugFile::error) << LOG_INFO "Failed to add and save file to config: "s << e.what() << '\n';
+    }
+
+    // Load room data / whatever other tool data
+    // Create child windows
+    // Level view, tile table, plaintext notes, room/area selector, other tools that change the level view (tileset selector, room fx)
+    createChildWindows();
+}
+LOG_RETHROW
+
+void Windows::updateLevelViewScrollbarDimensions()
+try
+{
+    // SCROLLINFO reference: https://docs.microsoft.com/en-gb/windows/desktop/api/winuser/ns-winuser-tagscrollinfo
+    // SetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/Winuser/nf-winuser-setscrollinfo
+    // GetClientRect reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getclientrect
+
+    if (!p_rom)
+        return;
+
+    const Rom::Dimensions dimensions(p_rom->getLevelViewDimensions());
+    RECT clientRect;
+    if (!GetClientRect(p_levelView->window, &clientRect))
+        throw WindowsError(LOG_INFO "Could not get client rect"s);
+
+    SCROLLINFO si;
+    si.cbSize = sizeof(si);
+    si.fMask = SIF_PAGE | SIF_RANGE;
+    si.nMin = 0;
+    
+    si.nPage = clientRect.bottom / dimensions.blockSize;
+    si.nMax = int(dimensions.n_y - 1);
+    SetScrollInfo(p_levelView->window, SB_VERT, &si, true);
+
+    si.nPage = clientRect.right / dimensions.blockSize;
+    si.nMax = int(dimensions.n_x - 1);
+    SetScrollInfo(p_levelView->window, SB_HORZ, &si, true);
+}
+LOG_RETHROW
 
 LRESULT CALLBACK Windows::LevelView::windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
 try
@@ -1158,12 +1190,16 @@ try
     case WM_PAINT:
     {
         // GetUpdateRect reference: https://msdn.microsoft.com/en-us/library/dd144943
+
         RECT updateRect;
         BOOL notEmpty(GetUpdateRect(window, &updateRect, false));
         if (notEmpty)
         {
             // BeginPaint reference: https://msdn.microsoft.com/en-us/library/dd183362
             // EndPaint reference: https://msdn.microsoft.com/en-us/library/dd162598
+            // SCROLLINFO reference: https://docs.microsoft.com/en-gb/windows/desktop/api/winuser/ns-winuser-tagscrollinfo
+            // GetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getscrollinfo
+
             PAINTSTRUCT ps;
             const auto endPaint([&](HDC)
             {
@@ -1173,8 +1209,84 @@ try
             if (!p_displayContext)
                 throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint");
 
-            p_windows->p_rom->drawLevelView(Cairo::Win32Surface::create(p_displayContext.get()));
+            // Get scroll position and pass it
+            SCROLLINFO si;
+            si.cbSize = sizeof(si);
+            si.fMask = SIF_POS;
+
+            if (!GetScrollInfo(p_levelView->window, SB_VERT, &si))
+                throw WindowsError(LOG_INFO "Could not get vertical scroll info"s);
+
+            unsigned y(si.nPos);
+
+            if (!GetScrollInfo(p_levelView->window, SB_HORZ, &si))
+                throw WindowsError(LOG_INFO "Could not get horizontal scroll info"s);
+
+            unsigned x(si.nPos);
+
+            p_windows->p_rom->drawLevelView(Cairo::Win32Surface::create(p_displayContext.get()), x, y);
         }
+
+        break;
+    }
+
+    // WM_HSCROLL reference: https://docs.microsoft.com/en-gb/windows/desktop/Controls/wm-hscroll
+    // WM_VSCROLL reference: https://docs.microsoft.com/en-gb/windows/desktop/Controls/wm-vscroll
+    case WM_HSCROLL:
+    case WM_VSCROLL:
+    {
+        // SCROLLINFO reference: https://docs.microsoft.com/en-gb/windows/desktop/api/winuser/ns-winuser-tagscrollinfo
+        // GetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getscrollinfo
+        // SetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-setscrollinfo
+
+        int barType;
+        if (message == WM_HSCROLL)
+            barType = SB_HORZ;
+        else
+            barType = SB_VERT;
+        
+        const unsigned short request(LOWORD(wParam));
+
+        SCROLLINFO si;
+        si.cbSize = sizeof(si);
+        si.fMask = SIF_POS | SIF_PAGE | SIF_RANGE;
+        if (!GetScrollInfo(p_levelView->window, barType, &si))
+            throw WindowsError(LOG_INFO "Could not get " + (barType == SB_HORZ ? "horizontal"s : "vertical"s) + " scroll info"s);
+
+        switch (request)
+        {
+        case SB_LINEDOWN:
+            ++si.nPos;
+            break;
+
+        case SB_LINEUP:
+            --si.nPos;
+            break;
+
+        case SB_PAGEDOWN:
+            si.nPos += si.nPage;
+            break;
+
+        case SB_PAGEUP:
+            si.nPos -= si.nPage;
+            break;
+
+        case SB_TOP:
+            si.nPos = 0;
+            break;
+
+        case SB_BOTTOM:
+            si.nPos = si.nMax - si.nPage + 1;
+            break;
+
+        case SB_THUMBTRACK:
+            si.nPos = HIWORD(wParam);
+            break;
+        }
+
+        SetScrollInfo(p_levelView->window, barType, &si, true);
+        if (!InvalidateRect(p_windows->p_levelView->window, nullptr, true))
+            throw WindowsError(LOG_INFO "Failed to invalidate level view window"s);
 
         break;
     }

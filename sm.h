@@ -463,7 +463,8 @@ private:
 public:
     explicit Sm(std::filesystem::path path);
 
-    virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface) const override;
+    virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
+    virtual Dimensions getLevelViewDimensions() const override;
     virtual std::vector<RoomList> getRoomList() const override;
     virtual void loadLevelData(std::vector<long> ids);
 };

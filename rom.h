@@ -154,12 +154,19 @@ public:
         std::vector<RoomList> subrooms;
     };
 
+    struct Dimensions
+    {
+        unsigned blockSize;
+        n_t n_y, n_x;
+    };
+
     static bool verifyRom(std::filesystem::path filepath) noexcept;
     static std::unique_ptr<Rom> loadRom(std::filesystem::path filepath);
 
     virtual ~Rom() = default;
 
-    virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface) const;
+    virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const;
+    virtual Dimensions getLevelViewDimensions() const;
     virtual std::vector<RoomList> getRoomList() const;
     virtual void loadLevelData(std::vector<long> ids);
 };
