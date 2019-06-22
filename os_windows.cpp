@@ -274,6 +274,8 @@ namespace Menu
         open,
         recent,
         exit,
+        tools,
+        spritemapViewer,
         help,
         about
     };
@@ -313,6 +315,8 @@ namespace Menu
             constexpr auto recent{Submenu(Id::recent, L"&Recent")};
                 /* Dummy */
             constexpr auto exit{Item(Id::exit, L"E&xit", ResInfo::isLastItem)};
+        constexpr auto tools{Submenu(Id::tools, L"&Tools")};
+            constexpr auto spritemapViewer{Item(Id::spritemapViewer, L"&Spritemap viewer", ResInfo::isLastItem)};
         constexpr auto help{Submenu(Id::help, L"&Help", ResInfo::isLastItem)};
             constexpr auto about{Item(Id::about, L"&About", ResInfo::isLastItem)};
     };
@@ -327,6 +331,8 @@ namespace Menu
             ITEM(recent)
                 DUMMY(recent)
             ITEM(exit)
+        ITEM(tools)
+            ITEM(spritemapViewer)
         ITEM(help)
             ITEM(about)
     #undef DUMMY
@@ -335,6 +341,7 @@ namespace Menu
 }
 
 
+// Static / non-member functions
 std::intptr_t CALLBACK aboutProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR) noexcept
 try
 {
@@ -477,7 +484,9 @@ try
         {
             DebugFile(DebugFile::error) << LOG_INFO << "Failed to save config after opening file: "s << e.what() << '\n';
         }
+
         PostQuitMessage(EXIT_SUCCESS);
+        
         break;
     }
 
@@ -581,6 +590,8 @@ try
             throw WindowsError(LOG_INFO "Failed to get menu item info"s);
 
         p_windows->handleCommand(menuItemInfo.wID, false);
+
+        break;
     }
 
     // WM_NOTIFY reference: https://docs.microsoft.com/en-us/windows/desktop/controls/wm-notify
@@ -634,6 +645,8 @@ try
             p_windows->updateLevelViewScrollbarDimensions();
             if (!InvalidateRect(p_windows->p_levelView->window, nullptr, true))
                 throw WindowsError(LOG_INFO "Failed to invalidate level view window"s);
+
+            break;
         }
         }
     }
@@ -819,6 +832,7 @@ long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e) noexcept
 }
 
 
+// Member functions
 Windows::Windows(HINSTANCE instance, int cmdShow, Config& config) noexcept
     : instance(instance), cmdShow(cmdShow), config(config)
 {
@@ -847,13 +861,13 @@ try
         throw WindowsError(LOG_INFO "Failed to allocate console");
 
     if (!std::freopen("CONIN$", "r", stdin))
-        throw std::runtime_error("Failed to redirect stdin");
+        throw std::runtime_error(LOG_INFO "Failed to redirect stdin");
 
     if (!std::freopen("CONOUT$", "w", stdout))
-        throw std::runtime_error("Failed to redirect stdout");
+        throw std::runtime_error(LOG_INFO "Failed to redirect stdout");
 
     if (!std::freopen("CONOUT$", "w", stderr))
-        throw std::runtime_error("Failed to redirect stderr");
+        throw std::runtime_error(LOG_INFO "Failed to redirect stderr");
 
 
     // Create main window
@@ -1013,23 +1027,38 @@ try
     if (!GetClientRect(window, &rect))
         throw WindowsError(LOG_INFO "Failed to get size of client area of main window"s);
 
-    if (!p_levelView)
-        p_levelView = std::make_unique<LevelView>(*this);
-    else
+    {
+        const int
+            x(0),
+            y(0),
+            width(int(rect.right * x_ratio_levelEditor)),
+            height(int(rect.bottom * y_ratio_levelEditor));
+
+        if (!p_levelView)
+            p_levelView = std::make_unique<LevelView>(*this);
+
         p_levelView->destroy();
+        p_levelView->create(x, y, width, height);
+    }
 
-    p_levelView->create(0, 0, int(rect.right * x_ratio_levelEditor), int(rect.bottom * y_ratio_levelEditor));
+    {
+        const int
+            x(int(rect.right * x_ratio_levelEditor)),
+            y(0),
+            width(int(rect.right * x_ratio_roomSelectorTree)),
+            height(int(rect.bottom * y_ratio_roomSelectorTree));
 
-    if (!p_roomSelectorTree)
-        p_roomSelectorTree = std::make_unique<RoomSelectorTree>(*this);
-    else
+        if (!p_roomSelectorTree)
+            p_roomSelectorTree = std::make_unique<RoomSelectorTree>(*this);
+
         p_roomSelectorTree->destroy();
-
-    p_roomSelectorTree->create(int(rect.right * x_ratio_levelEditor), 0, int(rect.right * x_ratio_roomSelectorTree), int(rect.bottom * y_ratio_roomSelectorTree));
+        p_roomSelectorTree->create(x, y, width, height);
+    }
 }
 LOG_RETHROW
 
 void Windows::destroyChildWindows()
+try
 {
     if (p_windows->p_levelView)
         p_windows->p_levelView->destroy();
@@ -1037,6 +1066,7 @@ void Windows::destroyChildWindows()
     if (p_windows->p_roomSelectorTree)
         p_windows->p_roomSelectorTree->destroy();
 }
+LOG_RETHROW
 
 void Windows::handleCommand(unsigned int id, bool isAccelerator)
 try
@@ -1084,6 +1114,18 @@ try
             }
 
             openRom(filepath);
+
+            break;
+        }
+
+        case Menu::menu.spritemapViewer.menuId:
+        {
+            if (!p_spritemapViewer)
+                p_spritemapViewer = std::make_unique<SpritemapViewer>(*this);
+            else
+                p_spritemapViewer->destroy();
+
+            p_spritemapViewer->create();
 
             break;
         }
@@ -1171,6 +1213,8 @@ try
 }
 LOG_RETHROW
 
+
+// LevelView
 LRESULT CALLBACK Windows::LevelView::windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
 try
 {
@@ -1207,7 +1251,7 @@ try
             });
             const std::unique_ptr p_displayContext(makeUniquePtr(BeginPaint(window, &ps), endPaint));
             if (!p_displayContext)
-                throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint");
+                throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint"s);
 
             // Get scroll position and pass it
             SCROLLINFO si;
@@ -1300,7 +1344,6 @@ catch (const std::exception& e)
     return DefWindowProc(window, message, wParam, lParam);
 }
 
-
 Windows::LevelView::LevelView(Windows& windows)
 try
     : windows(windows)
@@ -1362,6 +1405,8 @@ try
 }
 LOG_RETHROW
 
+
+// RoomSelectorTree
 Windows::RoomSelectorTree::RoomSelectorTree(Windows& windows) noexcept
     : windows(windows)
 {}
@@ -1420,6 +1465,351 @@ try
 
     if (!DestroyWindow(window))
         throw WindowsError(LOG_INFO "Failed to destroy room selector tree window");
+
+    window = nullptr;
+}
+LOG_RETHROW
+
+
+// SpritemapViewer
+LRESULT CALLBACK Windows::SpritemapViewer::windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
+try
+{
+    // Window procedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632593
+
+    const auto defaultHandler([&]()
+    {
+        return DefWindowProc(window, message, wParam, lParam);
+    });
+
+    switch (message)
+    {
+    default:
+        return defaultHandler();
+        
+    // WM_PAINT reference: https://msdn.microsoft.com/en-us/library/dd145213
+    case WM_PAINT:
+    {
+        // GetUpdateRect reference: https://msdn.microsoft.com/en-us/library/dd144943
+        RECT updateRect;
+        BOOL notEmpty(GetUpdateRect(window, &updateRect, false));
+        if (notEmpty)
+        {
+            // BeginPaint reference: https://msdn.microsoft.com/en-us/library/dd183362
+            // EndPaint reference: https://msdn.microsoft.com/en-us/library/dd162598
+            PAINTSTRUCT ps;
+            const auto endPaint([&](HDC)
+            {
+                EndPaint(window, &ps);
+            });
+            const std::unique_ptr p_displayContext(makeUniquePtr(BeginPaint(window, &ps), endPaint));
+            if (!p_displayContext)
+                throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint");
+
+            const std::wstring displayText(L"Hello, Windows!");
+            if (!TextOut(p_displayContext.get(), 0, 0, std::data(displayText), static_cast<int>(std::size(displayText))))
+                throw WindowsError(LOG_INFO "Failed to display text");
+        }
+
+        break;
+    }
+    }
+
+    return 0;
+}
+catch (const std::exception& e)
+{
+    DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
+    return DefWindowProc(window, message, wParam, lParam);
+}
+
+Windows::SpritemapViewer::SpritemapViewer(Windows& windows)
+try
+    : windows(windows)
+{
+    // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
+    // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
+    // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
+    // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
+    // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
+
+    p_spritemapViewer = this;
+
+    WNDCLASSEXW wcex{};
+    wcex.cbSize = sizeof(wcex);
+    wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
+    wcex.lpfnWndProc = windowProcedure;
+    wcex.hInstance = windows.instance;
+    wcex.hbrBackground = CreateSolidBrush(0x000000);
+    if (!wcex.hbrBackground)
+        throw WindowsError(LOG_INFO "Failed to create background brush");
+
+    wcex.lpszClassName = className;
+    ATOM registeredClass(RegisterClassEx(&wcex));
+    if (!registeredClass)
+        throw WindowsError(LOG_INFO "Failed to register spritemap viewer window class");
+}
+LOG_RETHROW
+
+void Windows::SpritemapViewer::create()
+try
+{
+    // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
+    // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
+    // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
+
+    const unsigned long exStyle(WS_EX_WINDOWEDGE);
+    const unsigned long style(WS_TILEDWINDOW | WS_VISIBLE);
+    HMENU const menu{};
+    void* const param{};
+    const int x(CW_USEDEFAULT), y(CW_USEDEFAULT), width(CW_USEDEFAULT), height(CW_USEDEFAULT);
+    window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windows.window, menu, windows.instance, param);
+    if (!window)
+        throw WindowsError(LOG_INFO "Failed to create spritemap viewer window");
+
+    createChildWindows();
+}
+LOG_RETHROW
+
+void Windows::SpritemapViewer::destroy()
+try
+{
+    // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
+
+    if (!window)
+        return;
+
+    if (!DestroyWindow(window))
+        throw WindowsError(LOG_INFO "Failed to destroy spritemap viewer window");
+
+    window = nullptr;
+}
+LOG_RETHROW
+
+void Windows::SpritemapViewer::createChildWindows()
+try
+{
+    // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
+    // INITCOMMONCONTROLSEX reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/ns-commctrl-taginitcommoncontrolsex
+    // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
+    // InitCommonControlsEx reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/nf-commctrl-initcommoncontrolsex
+
+    INITCOMMONCONTROLSEX iccs{};
+    iccs.dwSize = sizeof(iccs);
+    iccs.dwICC = ICC_TREEVIEW_CLASSES;
+    if (!InitCommonControlsEx(&iccs))
+        throw std::runtime_error(LOG_INFO "Could not initialise common controls"s);
+
+    RECT rect;
+    if (!GetClientRect(window, &rect))
+        throw WindowsError(LOG_INFO "Failed to get size of client area of spritemap viewer window"s);
+
+    {
+        const int
+            x(0),
+            y(0),
+            width(int(rect.right * x_ratio_spritemapView)),
+            height(int(rect.bottom * y_ratio_spritemapView));
+
+        if (!p_spritemapView)
+            p_spritemapView = std::make_unique<SpritemapView>(windows);
+
+        p_spritemapView->destroy();
+        p_spritemapView->create(x, y, width, height, window);
+    }
+}
+LOG_RETHROW
+
+
+// SpritemapView
+LRESULT CALLBACK Windows::SpritemapViewer::SpritemapView::windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
+try
+{
+    // Window procedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632593
+
+    const auto defaultHandler([&]()
+    {
+        return DefWindowProc(window, message, wParam, lParam);
+    });
+
+    switch (message)
+    {
+    default:
+        return defaultHandler();
+
+     // WM_PAINT reference: https://msdn.microsoft.com/en-us/library/dd145213
+    case WM_PAINT:
+    {
+        // GetUpdateRect reference: https://msdn.microsoft.com/en-us/library/dd144943
+
+        RECT updateRect;
+        BOOL notEmpty(GetUpdateRect(window, &updateRect, false));
+        if (notEmpty)
+        {
+            // BeginPaint reference: https://msdn.microsoft.com/en-us/library/dd183362
+            // EndPaint reference: https://msdn.microsoft.com/en-us/library/dd162598
+            // SCROLLINFO reference: https://docs.microsoft.com/en-gb/windows/desktop/api/winuser/ns-winuser-tagscrollinfo
+            // GetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getscrollinfo
+
+            PAINTSTRUCT ps;
+            const auto endPaint([&](HDC)
+            {
+                EndPaint(window, &ps);
+            });
+            const std::unique_ptr p_displayContext(makeUniquePtr(BeginPaint(window, &ps), endPaint));
+            if (!p_displayContext)
+                throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint"s);
+
+            // Get scroll position and pass it
+            /*
+            SCROLLINFO si;
+            si.cbSize = sizeof(si);
+            si.fMask = SIF_POS;
+
+            if (!GetScrollInfo(p_spritemapViewer->window, SB_VERT, &si))
+                throw WindowsError(LOG_INFO "Could not get vertical scroll info"s);
+
+            unsigned y(si.nPos);
+
+            if (!GetScrollInfo(p_spritemapViewer->window, SB_HORZ, &si))
+                throw WindowsError(LOG_INFO "Could not get horizontal scroll info"s);
+
+            unsigned x(si.nPos);
+            /*/
+            const unsigned x{}, y{};
+            //*/
+
+            p_windows->p_rom->drawSpritemapView(Cairo::Win32Surface::create(p_displayContext.get()), x, y);
+        }
+
+        break;
+    }
+
+    // WM_HSCROLL reference: https://docs.microsoft.com/en-gb/windows/desktop/Controls/wm-hscroll
+    // WM_VSCROLL reference: https://docs.microsoft.com/en-gb/windows/desktop/Controls/wm-vscroll
+    case WM_HSCROLL:
+    case WM_VSCROLL:
+    {
+        // SCROLLINFO reference: https://docs.microsoft.com/en-gb/windows/desktop/api/winuser/ns-winuser-tagscrollinfo
+        // GetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getscrollinfo
+        // SetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-setscrollinfo
+
+        int barType;
+        if (message == WM_HSCROLL)
+            barType = SB_HORZ;
+        else
+            barType = SB_VERT;
+
+        const unsigned short request(LOWORD(wParam));
+
+        SCROLLINFO si;
+        si.cbSize = sizeof(si);
+        si.fMask = SIF_POS | SIF_PAGE | SIF_RANGE;
+        if (!GetScrollInfo(p_spritemapViewer->window, barType, &si))
+            throw WindowsError(LOG_INFO "Could not get " + (barType == SB_HORZ ? "horizontal"s : "vertical"s) + " scroll info"s);
+
+        switch (request)
+        {
+        case SB_LINEDOWN:
+            ++si.nPos;
+            break;
+
+        case SB_LINEUP:
+            --si.nPos;
+            break;
+
+        case SB_PAGEDOWN:
+            si.nPos += si.nPage;
+            break;
+
+        case SB_PAGEUP:
+            si.nPos -= si.nPage;
+            break;
+
+        case SB_TOP:
+            si.nPos = 0;
+            break;
+
+        case SB_BOTTOM:
+            si.nPos = si.nMax - si.nPage + 1;
+            break;
+
+        case SB_THUMBTRACK:
+            si.nPos = HIWORD(wParam);
+            break;
+        }
+
+        SetScrollInfo(p_spritemapViewer->window, barType, &si, true);
+        if (!InvalidateRect(p_windows->p_spritemapViewer->window, nullptr, true))
+            throw WindowsError(LOG_INFO "Failed to invalidate spritemap viewer window"s);
+
+        break;
+    }
+    }
+
+    return 0;
+}
+catch (const std::exception& e)
+{
+    DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
+    return DefWindowProc(window, message, wParam, lParam);
+}
+
+Windows::SpritemapViewer::SpritemapView::SpritemapView(Windows& windows)
+try
+    : windows(windows)
+{
+    // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
+    // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
+    // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
+    // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
+    // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
+
+    p_spritemapView = this;
+
+    WNDCLASSEXW wcex{};
+    wcex.cbSize = sizeof(wcex);
+    wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
+    wcex.lpfnWndProc = windowProcedure;
+    wcex.hInstance = windows.instance;
+    wcex.hbrBackground = CreateSolidBrush(0x000000);
+    if (!wcex.hbrBackground)
+        throw WindowsError(LOG_INFO "Failed to create background brush");
+
+    wcex.lpszClassName = className;
+    ATOM registeredClass(RegisterClassEx(&wcex));
+    if (!registeredClass)
+        throw WindowsError(LOG_INFO "Failed to register spritemap view window class");
+}
+LOG_RETHROW
+
+void Windows::SpritemapViewer::SpritemapView::create(int x, int y, int width, int height, HWND hwnd)
+try
+{
+    // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
+    // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
+    // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
+
+    const unsigned long exStyle(WS_EX_WINDOWEDGE);
+    const unsigned long style(WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL);
+    HMENU const menu{};
+    void* const param{};
+    window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, hwnd, menu, windows.instance, param);
+    if (!window)
+        throw WindowsError(LOG_INFO "Failed to create spritemap view window");
+}
+LOG_RETHROW
+
+void Windows::SpritemapViewer::SpritemapView::destroy()
+try
+{
+    // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
+
+    if (!window)
+        return;
+
+    if (!DestroyWindow(window))
+        throw WindowsError(LOG_INFO "Failed to destroy spritemap view window");
 
     window = nullptr;
 }

@@ -109,7 +109,7 @@ private:
 
         constexpr long_t snes() const noexcept
         {
-            return v << 1 & 0xFF0000 | v & 0xFFFF | 0x808000;
+            return v << 1 & 0xFF'0000 | v & 0xFFFF | 0x80'8000;
         }
     };
 
@@ -411,6 +411,60 @@ private:
         LevelData(n_t n_y, n_t n_x, bool isCustomLayer2, Reader& r);
     };
 
+    struct Spritemap
+    {
+        struct Entry
+        {
+        /*
+            ; More specifically, a spritemap entry is:
+            ;     s000000xxxxxxxxx yyyyyyyy YXppPPPttttttttt
+            ; Where:
+            ;     s = size bit
+            ;     x = X offset of sprite from centre
+            ;     y = Y offset of sprite from centre
+            ;     Y = Y flip
+            ;     X = X flip
+            ;     P = palette
+            ;     p = priority (relative to background)
+            ;     t = tile number
+        */
+
+            signed offset_x, offset_y;
+            bool large, flip_x, flip_y;
+            index_t i_palette, i_tile, priority;
+
+            Entry() = default;
+            explicit Entry(Reader& r)
+            {
+                {
+                    word_t t(r.get<word_t>());
+                    large = t >> 15;
+                    offset_x = (t & 0xFF) - (t & 0x100);
+                }
+                offset_y = r.get<std::int8_t>();
+                {
+                    word_t t(r.get<word_t>());
+                    flip_y = t >> 15;
+                    flip_x = t >> 14 & 1;
+                    priority = t >> 12 & 3;
+                    i_palette = t >> 9 & 7;
+                    i_tile = t & 0x1FF;
+                }
+            }
+        };
+
+        std::vector<Entry> entries;
+
+        Spritemap() = default;
+        explicit Spritemap(Reader& r)
+        {
+            n_t n_entries = r.get<word_t>();
+            entries.reserve(n_entries);
+            for (index_t i(n_entries); i --> 0;)
+                entries.push_back(Entry(r));
+        }
+    };
+
     static std::vector<byte_t> decompress(n_t maxSize, Reader& r);
     static n_t decompress(byte_t* dest, n_t capacity, Reader& r);
 
@@ -453,7 +507,8 @@ private:
     LevelData levelData;
 
     void decompressTileset(index_t i_tileset);
-    void createMetatileSurface(index_t i_metatiles);
+    Cairo::RefPtr<Cairo::ImageSurface> createTileSurface(const tile_t& tile, const palette_t& palette, bool flip_x, bool flip_y) const;
+    Cairo::RefPtr<Cairo::ImageSurface> createMetatileSurface(const metatile_t& metatile) const;
     void createMetatileSurfaces();
     Cairo::RefPtr<Cairo::ImageSurface> createLayerSurface(const Matrix<word_t>& layer) const;
     void loadTileset(index_t i_tileset);
@@ -464,9 +519,10 @@ public:
     explicit Sm(std::filesystem::path path);
 
     virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
+    virtual void drawSpritemapView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
     virtual Dimensions getLevelViewDimensions() const override;
     virtual std::vector<RoomList> getRoomList() const override;
-    virtual void loadLevelData(std::vector<long> ids);
+    virtual void loadLevelData(std::vector<long> ids) override;
 };
 
 constexpr Sm::Pointer operator"" _sm(unsigned long long pointer)

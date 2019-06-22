@@ -166,6 +166,7 @@ public:
     virtual ~Rom() = default;
 
     virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const;
+    virtual void drawSpritemapView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const;
     virtual Dimensions getLevelViewDimensions() const;
     virtual std::vector<RoomList> getRoomList() const;
     virtual void loadLevelData(std::vector<long> ids);

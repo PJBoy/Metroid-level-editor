@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\util">
+      <UniqueIdentifier>{d94cd85b-5a50-4dc5-b6c9-563d00e89298}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">
@@ -53,6 +56,9 @@
     </ClInclude>
     <ClInclude Include="byte_cast_iterator.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="util\graphics.h">
+      <Filter>Header Files\util</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -1,11 +1,14 @@
 #include "sm.h"
 
+#include "util/graphics.h"
 #include "global.h"
 
 #include <array>
 #include <numeric>
 #include <string_view>
 
+
+// Public member functions
 Sm::Sm(std::filesystem::path filepath)
 try
     : Rom(filepath)
@@ -31,17 +34,72 @@ try
         return;
 
     Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_surface));
-    //p_context->set_antialias(Cairo::Antialias::ANTIALIAS_NONE);
-    //p_context->scale(0.5, 0.5);
     p_context->set_source(p_level, -signed(x * 16), -signed(y * 16));
     p_context->paint();
 }
 LOG_RETHROW
 
+void Sm::drawSpritemapView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned scroll_x, unsigned scroll_y) const
+try
+{
+    const Pointer
+        p_tiles(0xAB'CC00_sm),
+        p_palette(0xA7'8687_sm),
+        p_spritemapData(0xA7'A5DF_sm);
+
+    Reader r(makeReader());
+
+    // Enemy tiles are loaded into the last 0x100 bytes, so I'm just going to mirror the two halves
+    tile_t tiles[0x200]{};
+    r.get<char, 1>(p_tiles, reinterpret_cast<char*>(tiles + 0x100), sizeof(tile_t) * 0x100);
+
+    palette_t palette(r.get<std::size(palette_t{}), word_t>(p_palette));
+
+    r.seek(p_spritemapData);
+    Spritemap spritemap(r);
+
+    const n_t width(256), height(256);
+    Cairo::RefPtr<Cairo::ImageSurface> p_spritemapSurface(Util::makeImageSurface(width, height));
+    {
+        Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_spritemapSurface));
+        /*
+        // Tile viewer
+        for (index_t y{}; y < std::size(tiles) / 0x10; ++y)
+            for (index_t x{}; x < 0x10; ++x)
+            {
+                Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[y * 0x10 + x], palette, false, false));
+                p_context->set_source(p_tileSurface, x * 8.0, y * 8.0);
+                p_context->paint();
+            }
+        /*/
+        // Spritemap viewer
+        for (index_t priority{}; priority < 4; ++priority)
+            for (const Spritemap::Entry& entry : spritemap.entries)
+                if (entry.priority == priority)
+                    for (index_t y{}; y <= n_t(entry.large); ++y)
+                        for (index_t x{}; x <= n_t(entry.large); ++x)
+                        {
+                            Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[entry.i_tile + y * 0x10 + x], palette, entry.flip_x, entry.flip_y));
+                            p_context->set_source(p_tileSurface, entry.offset_x + width / 2 + x * 8.0, entry.offset_y + height / 2 + y * 8.0);
+                            p_context->paint();
+                        }
+        //*/
+    }
+
+
+    Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_surface));
+    p_context->scale(3, 3);
+    p_context->set_source(p_spritemapSurface, -signed(scroll_x), -signed(scroll_y));
+    p_context->paint();
+}
+LOG_RETHROW
+
 auto Sm::getLevelViewDimensions() const -> Dimensions
+try
 {
     return {16, levelData.n_y * 0x10, levelData.n_x * 0x10};
 }
+LOG_RETHROW
 
 auto Sm::getRoomList() const -> std::vector<RoomList>
 try
@@ -79,33 +137,6 @@ try
 }
 LOG_RETHROW
 
-Cairo::RefPtr<Cairo::ImageSurface> Sm::createLayerSurface(const Matrix<word_t>& layer) const
-{
-    Cairo::RefPtr<Cairo::ImageSurface> p_layer(Cairo::ImageSurface::create(Cairo::Format::FORMAT_ARGB32, int(layer.size_x() * 0x10), int(layer.size_y() * 0x10)));
-    Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_layer));
-    for (index_t y{}; y < layer.size_y(); ++y)
-        for (index_t x{}; x < layer.size_x(); ++x)
-        {
-            const word_t i_block(levelData.layer1[y][x] & 0x3FF);
-            const bool
-                flip_x(levelData.layer1[y][x] >> 10 & 1),
-                flip_y(levelData.layer1[y][x] >> 11 & 1);
-
-            Cairo::RefPtr<Cairo::ImageSurface> p_block(Cairo::ImageSurface::create(Cairo::Format::FORMAT_ARGB32, 16, 16));
-            {
-                Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_block));
-                p_context->translate(8.0, 8.0);
-                p_context->scale(flip_x ? -1 : 1, flip_y ? -1 : 1);
-                p_context->set_source(metatileSurfaces[i_block], -8.0, -8.0);
-                p_context->paint();
-            }
-            p_context->set_source(p_block, x * 16.0, y * 16.0);
-            p_context->paint();
-        }
-
-    return p_layer;
-}
-
 void Sm::loadLevelData(std::vector<long> ids)
 try
 {
@@ -127,7 +158,7 @@ try
 
     // Now to create the Cairo layer1 and possibly layer2 image surfaces
     loadTileset(stateHeader.i_tileset);
-    p_level = Cairo::ImageSurface::create(Cairo::Format::FORMAT_ARGB32, int(levelData.n_x * 0x100), int(levelData.n_y * 0x100));
+    p_level = Util::makeImageSurface(int(levelData.n_x * 0x100), int(levelData.n_y * 0x100));
     if (levelData.layer2)
     {
         p_layer2 = createLayerSurface(levelData.layer2);
@@ -143,6 +174,8 @@ try
 }
 LOG_RETHROW
 
+
+// Nested class member functions
 Sm::Reader Sm::makeReader(Pointer address /* = {} */) const
 try
 {
@@ -263,38 +296,65 @@ Sm::LevelData::LevelData(n_t n_y, n_t n_x, bool isCustomLayer2, Reader& r)
 try
     : n_y(n_y), n_x(n_x)
 {
-    if (n_x * n_y > 50)
-        throw std::runtime_error("Room size "s + std::to_string(n_x) + "x"s + std::to_string(n_y) + " exceeds maximum of 50"s);
-
-    const n_t maxScrollSize(0x10 * 0x10 * (2 + 1 + 2));
-    n_t scrollSize(0x10 * 0x10 * (2 + 1));
-    if (isCustomLayer2)
-        scrollSize += 0x10 * 0x10 * 2;
-
-    // Not using the room size to determine the decompress max size parameter as decompressed level data is permitted to exceed the room size
-    // Using maximum room size instead
-    std::vector<byte_t> decompressedData(decompress(50 * maxScrollSize + 2, r));
-    if (std::size(decompressedData) < n_x * n_y * scrollSize + 2)
-        throw std::runtime_error("Decompressed level data is too small for room. Expected "s + toHexString(n_x * n_y * scrollSize + 2) + " bytes, found "s + toHexString(std::size(decompressedData)) + " bytes"s);
-
-    const word_t levelDataSize(decompressedData[0] | decompressedData[1] << 8);
-    const n_t n_blocks(levelDataSize / 2);
-
-    if (std::size(decompressedData) != n_blocks * (2 + 1) + 2 && std::size(decompressedData) != n_blocks * (2 + 1 + 2) + 2)
-        throw std::runtime_error("Reported size of decompressed level data ("s + toHexString(n_blocks) + " blocks) isn't consistent with the actual size of decompressed level data ("s + toHexString(std::size(decompressedData)) + " bytes)"s);
-
-    layer1 = Matrix<word_t>(n_y * 0x10, n_x * 0x10);
-    std::copy_n(ByteCastIterator<word_t>(std::data(decompressedData) + 2), n_blocks, std::begin(layer1));
-
-    bts = Matrix<byte_t>(n_y * 0x10, n_x * 0x10);
-    std::copy_n(std::begin(decompressedData) + 2 + levelDataSize, n_blocks, std::begin(bts));
-    if (isCustomLayer2)
     {
-        layer2 = Matrix<word_t>(n_y * 0x10, n_x * 0x10);
-        std::copy_n(ByteCastIterator<word_t>(std::data(decompressedData) + 2 + n_blocks * 3), n_blocks, std::begin(layer2));
+        if (n_x == 0 || n_y == 0)
+            throw std::runtime_error(LOG_INFO "Room size "s + std::to_string(n_x) + "x"s + std::to_string(n_y) + " has a zero dimension"s);
+
+        if (n_x * n_y > 50)
+            throw std::runtime_error(LOG_INFO "Room size "s + std::to_string(n_x) + "x"s + std::to_string(n_y) + " exceeds maximum of 50"s);
+
+        const n_t maxScrollSize(0x10 * 0x10 * (2 + 1 + 2));
+        n_t scrollSize(0x10 * 0x10 * (2 + 1));
+        if (isCustomLayer2)
+            scrollSize += 0x10 * 0x10 * 2;
+
+        // Not using the room size to determine the decompress max size parameter as decompressed level data is permitted to exceed the room size
+        // Using maximum room size instead
+        std::vector<byte_t> decompressedData(decompress(50 * maxScrollSize + 2, r));
+        if (std::size(decompressedData) < n_x * n_y * scrollSize + 2)
+            throw std::runtime_error(LOG_INFO "Decompressed level data is too small for room. Expected "s + toHexString(n_x * n_y * scrollSize + 2) + " bytes, found "s + toHexString(std::size(decompressedData)) + " bytes"s);
+
+        const word_t levelDataSize(decompressedData[0] | decompressedData[1] << 8);
+        const n_t n_blocks(levelDataSize / 2);
+
+        if (std::size(decompressedData) != n_blocks * (2 + 1) + 2 && std::size(decompressedData) != n_blocks * (2 + 1 + 2) + 2)
+            throw std::runtime_error(LOG_INFO "Reported size of decompressed level data ("s + toHexString(n_blocks) + " blocks) isn't consistent with the actual size of decompressed level data ("s + toHexString(std::size(decompressedData)) + " bytes)"s);
+
+        layer1 = Matrix<word_t>(n_y * 0x10, n_x * 0x10);
+        std::copy_n(ByteCastIterator<word_t>(std::data(decompressedData) + 2), n_blocks, std::begin(layer1));
+
+        bts = Matrix<byte_t>(n_y * 0x10, n_x * 0x10);
+        std::copy_n(std::begin(decompressedData) + 2 + levelDataSize, n_blocks, std::begin(bts));
+
+        if (isCustomLayer2)
+        {
+            layer2 = Matrix<word_t>(n_y * 0x10, n_x * 0x10);
+            std::copy_n(ByteCastIterator<word_t>(std::data(decompressedData) + 2 + n_blocks * 3), n_blocks, std::begin(layer2));
+        }
     }
 }
 LOG_RETHROW
+
+
+// Private member functions
+Cairo::RefPtr<Cairo::ImageSurface> Sm::createLayerSurface(const Matrix<word_t>& layer) const
+{
+    Cairo::RefPtr<Cairo::ImageSurface> p_layer(Util::makeImageSurface(int(layer.size_x() * 0x10), int(layer.size_y() * 0x10)));
+    Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_layer));
+    for (index_t y{}; y < layer.size_y(); ++y)
+        for (index_t x{}; x < layer.size_x(); ++x)
+        {
+            const word_t i_block(layer[y][x] & 0x3FF);
+            const bool
+                flip_x(layer[y][x] >> 10 & 1),
+                flip_y(layer[y][x] >> 11 & 1);
+
+            p_context->set_source(Util::flip(metatileSurfaces[i_block], flip_x, flip_y), x * 16.0, y * 16.0);
+            p_context->paint();
+        }
+
+    return p_layer;
+}
 
 void Sm::decompressTileset(index_t i_tileset)
 try
@@ -328,80 +388,62 @@ try
 }
 LOG_RETHROW
 
-void Sm::createMetatileSurface(index_t i_metatiles)
+Cairo::RefPtr<Cairo::ImageSurface> Sm::createTileSurface(const tile_t& tile, const palette_t& palette, bool flip_x, bool flip_y) const
 try
 {
-    const metatile_t& metatile(metatiles[i_metatiles]);
-    Cairo::RefPtr<Cairo::ImageSurface>& p_metatileSurface(metatileSurfaces[i_metatiles]);
+    Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(Util::makeImageSurface(8, 8));
+    unsigned char* const tileSurfaceBuffer(p_tileSurface->get_data());
 
-    auto createTileSurface([&](word_t metatilePart) -> Cairo::RefPtr<Cairo::ImageSurface>
-    {
-        Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(Cairo::ImageSurface::create(Cairo::Format::FORMAT_ARGB32, 8, 8));
-        unsigned char* const tileSurfaceBuffer(p_tileSurface->get_data());
+    for (index_t y{}; y < 8; ++y)
+        for (index_t x{}; x < 8; ++x)
+        {
+            // Bitplane decoding
+            index_t i_palette{};
+            for (index_t i{}; i < 2; ++i)
+                for (index_t ii{}; ii < 2; ++ii)
+                    i_palette |= (tile[y * 2 + i * 0x10 + ii] >> 7 - x & 1) << i * 2 + ii;
 
-        const index_t i_tiles(metatilePart & 0x3FF);
-        const index_t i_palettes(metatilePart >> 10 & 7);
+            Util::bgr15ToRgba32(tileSurfaceBuffer + (y * 8 + x) * 4, palette[i_palette], i_palette == 0);
+        }
 
-        tile_t& tile(tiles[i_tiles]);
-        palette_t& palette(bgPalettes[i_palettes]);
-        for (index_t y{}; y < 8; ++y)
-            for (index_t x{}; x < 8; ++x)
-            {
-                const index_t i_tileSurfaceBuffer((y * 8 + x) * 4);
-                
-                // Bitplane decoding
-                index_t i_palette{};
-                for (index_t i{}; i < 2; ++i)
-                    for (index_t ii{}; ii < 2; ++ii)
-                        i_palette |= (tile[y * 2 + i * 0x10 + ii] >> 7 - x & 1) << i * 2 + ii;
+    p_tileSurface->mark_dirty();
+    return Util::flip(p_tileSurface, flip_x, flip_y);
+}
+LOG_RETHROW
 
-                if (i_palette == 0)
-                {
-                    tileSurfaceBuffer[i_tileSurfaceBuffer] = 0;
-                    tileSurfaceBuffer[i_tileSurfaceBuffer + 1] = 0;
-                    tileSurfaceBuffer[i_tileSurfaceBuffer + 2] = 0;
-                    tileSurfaceBuffer[i_tileSurfaceBuffer + 3] = 0;
-                }
-                else
-                {
-                    word_t colour(palette[i_palette]);
-                    tileSurfaceBuffer[i_tileSurfaceBuffer] = (colour >> 10 & 0x1F) * 0xFF / 0x1F;
-                    tileSurfaceBuffer[i_tileSurfaceBuffer + 1] = (colour >> 5 & 0x1F) * 0xFF / 0x1F;
-                    tileSurfaceBuffer[i_tileSurfaceBuffer + 2] = (colour & 0x1F) * 0xFF / 0x1F;
-                    tileSurfaceBuffer[i_tileSurfaceBuffer + 3] = 0xFF;
-                }
-            }
-
-        p_tileSurface->mark_dirty();
-        return p_tileSurface;
-    });
-
-    p_metatileSurface = Cairo::ImageSurface::create(Cairo::Format::FORMAT_ARGB32, 16, 16);
+Cairo::RefPtr<Cairo::ImageSurface> Sm::createMetatileSurface(const metatile_t& metatile) const
+try
+{
+    Cairo::RefPtr<Cairo::ImageSurface> p_metatileSurface(Util::makeImageSurface(16, 16));
 
     for (index_t y{}; y < 2; ++y)
         for (index_t x{}; x < 2; ++x)
         {
             const word_t metatilePart(metatile[y * 2 + x]);
+            const index_t
+                i_tiles(metatilePart & 0x3FF),
+                i_palettes(metatilePart >> 10 & 7);
+
             const bool
                 bgPriority(metatilePart >> 13 & 1),
                 flip_x(metatilePart >> 14 & 1),
                 flip_y(metatilePart >> 15);
 
-            // Move user-space origin to centre of tile, flip the user-space axes if necessary, plot the tile (moving the user-space origin back to the tile origin)
             Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_metatileSurface));
-            p_context->translate(x * 8.0 + 4.0, y * 8.0 + 4.0);
-            p_context->scale(flip_x ? -1 : 1, flip_y ? -1 : 1);
-            p_context->set_source(createTileSurface(metatilePart), -4.0, -4.0);
+            Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[i_tiles], bgPalettes[i_palettes], flip_x, flip_y));
+            p_context->set_source(p_tileSurface, x * 8.0, y * 8.0);
             p_context->paint();
         }
+
+    return p_metatileSurface;
 }
 LOG_RETHROW
 
 void Sm::createMetatileSurfaces()
 try
 {
-    for (index_t i_metatiles{}; i_metatiles < std::size(metatiles); ++i_metatiles)
-        createMetatileSurface(i_metatiles);
+    for (index_t i{}; i < std::size(metatiles); ++i)
+        metatileSurfaces[i] = createMetatileSurface(metatiles[i]);
 }
 LOG_RETHROW
 
@@ -451,7 +493,7 @@ try
             size += (byte & 3) << 8 | r.get<byte_t>();
         }
         if (capacity < size)
-            throw std::out_of_range("Decompressed data exceeds size of buffer"s);
+            throw std::out_of_range(LOG_INFO "Decompressed data exceeds size of buffer"s);
 
         switch (type)
         {
@@ -468,6 +510,7 @@ try
         // Word fill
         case 2:
         {
+            // Odd sizes are allowed, the LSB is copied in this case
             std::array<byte_t, 2> filler{r.get<byte_t>(), r.get<byte_t>()};
             for (index_t i{}; i < size; ++i)
                 dest[i] = filler[i & 1];
@@ -483,10 +526,11 @@ try
         // Dictionary copy
         case 4:
         {
-            // Note that std::copy/memcpy with overlapping ranges is UB
+            // Note that std::copy/memcpy with the destination range beginning within the source range is UB,
+            // and std::copy_backward would be incorrect (needs forward copying semantics)
             word_t offset(r.get<word_t>());
             if (begin_dest + offset + size > end_dest)
-                throw std::out_of_range("Decompressed data exceeds size of buffer"s);
+                throw std::out_of_range(LOG_INFO "Decompressed data exceeds size of buffer"s);
 
             for (index_t i{}; i < size; ++i)
                 dest[i] = begin_dest[offset + i];
@@ -499,7 +543,7 @@ try
         {
             word_t offset(r.get<word_t>());
             if (begin_dest + offset + size > end_dest)
-                throw std::out_of_range("Decompressed data exceeds size of buffer"s);
+                throw std::out_of_range(LOG_INFO "Decompressed data exceeds size of buffer"s);
 
             for (index_t i{}; i < size; ++i)
                 dest[i] = ~begin_dest[offset + i];
@@ -510,10 +554,11 @@ try
         // Sliding dictionary copy
         case 6:
         {
-            // Note that std::copy/memcpy with overlapping ranges is UB
+            // Note that std::copy/memcpy with the destination range beginning within the source range is UB,
+            // and std::copy_backward would be incorrect (needs forward copying semantics)
             byte_t offset(r.get<byte_t>());
             if (dest - offset < begin_dest)
-                throw std::out_of_range("Invalid compressed data"s);
+                throw std::out_of_range(LOG_INFO "Invalid compressed data"s);
 
             for (index_t i{}; i < size; ++i)
                 dest[i] = dest[i - offset];
@@ -526,7 +571,7 @@ try
         {
             byte_t offset(r.get<byte_t>());
             if (dest - offset < begin_dest)
-                throw std::out_of_range("Invalid compressed data"s);
+                throw std::out_of_range(LOG_INFO "Invalid compressed data"s);
 
             for (index_t i{}; i < size; ++i)
                 dest[i] = ~dest[i - offset];

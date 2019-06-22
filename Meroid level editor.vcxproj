@@ -101,7 +101,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
       <ConformanceMode>true</ConformanceMode>
-      <DisableSpecificWarnings>4305; 4458; 4554</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4305; 4456; 4458; 4554</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -132,7 +132,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
       <ConformanceMode>true</ConformanceMode>
-      <DisableSpecificWarnings>4305; 4458; 4554</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4305; 4456; 4458; 4554</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -162,7 +162,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ConformanceMode>true</ConformanceMode>
-      <DisableSpecificWarnings>4305; 4458; 4554</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4305; 4456; 4458; 4554</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -194,7 +194,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ConformanceMode>true</ConformanceMode>
-      <DisableSpecificWarnings>4305; 4458; 4554</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4305; 4456; 4458; 4554</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -221,6 +221,7 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="rom.h" />
     <ClInclude Include="sm.h" />
+    <ClInclude Include="util\graphics.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="config.cpp" />
