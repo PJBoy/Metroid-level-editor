@@ -43,201 +43,191 @@ std::wstring toWstring(const std::string& from) noexcept
 }
 
 
-class WindowsError : public std::runtime_error
+// WindowError
+std::wstring WindowsError::getErrorMessage(unsigned long errorId)
+try
 {
-    // GetLastError reference: https://msdn.microsoft.com/en-gb/library/windows/desktop/ms679360
-
-protected:
     // FormatMessage reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms679351
-    static std::wstring getErrorMessage(unsigned long errorId)
-    try
-    {
-        const unsigned long flags(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS);
-        const void* const source{};
-        const unsigned long languageId(MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT));
-        wchar_t* formattedMessage;
-        const unsigned long size{};
-        if (!FormatMessage(flags, source, errorId, languageId, reinterpret_cast<wchar_t*>(&formattedMessage), size, nullptr))
-            return L"Unknown error. FormatMessage failed with error code " + std::to_wstring(GetLastError());
+    const unsigned long flags(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS);
+    const void* const source{};
+    const unsigned long languageId(MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT));
+    wchar_t* formattedMessage;
+    const unsigned long size{};
+    if (!FormatMessage(flags, source, errorId, languageId, reinterpret_cast<wchar_t*>(&formattedMessage), size, nullptr))
+        return L"Unknown error. FormatMessage failed with error code " + std::to_wstring(GetLastError());
         
-        std::wstring ret(formattedMessage);
-        LocalFree(formattedMessage);
-        return ret;
-    }
-    LOG_RETHROW
+    std::wstring ret(formattedMessage);
+    LocalFree(formattedMessage);
+    return ret;
+}
+LOG_RETHROW
 
+std::string WindowsError::makeMessage() noexcept
+{
     // TODO: add stack trace
     // https://msdn.microsoft.com/en-us/library/windows/desktop/bb204633
-    static std::string makeMessage() noexcept
-    {
-        return makeMessage(GetLastError());
-    }
+    return makeMessage(GetLastError());
+}
 
-    static std::string makeMessage(const std::string& extraMessage) noexcept
-    {
-        return makeMessage(GetLastError(), extraMessage);
-    }
-
-    static std::string makeMessage(unsigned long errorId) noexcept
-    try
-    {
-        const std::string errorMessage(toString(getErrorMessage(errorId)));
-        return "Win32 API error occurred, error code " + std::to_string(errorId) + ": " + errorMessage;
-    }
-    catch (...)
-    {
-        return "Win32 API error occurred. Unknown error. An exception was thrown during error message construction.";
-    }
-
-    static std::string makeMessage(unsigned long errorId, const std::string& extraMessage) noexcept
-    try
-    {
-        return makeMessage(errorId) + ' ' + extraMessage;
-    }
-    catch (...)
-    {
-        return "Win32 API error occurred. Unknown error. An exception was thrown during error message construction.";
-    }
-
-public:
-    WindowsError() noexcept
-        : std::runtime_error(makeMessage())
-    {}
-
-    WindowsError(unsigned long errorId) noexcept
-        : std::runtime_error(makeMessage(errorId))
-    {}
-
-    WindowsError(const std::string& extraMessage) noexcept
-        : std::runtime_error(makeMessage(extraMessage))
-    {}
-
-    WindowsError(unsigned long errorId, const std::string& extraMessage) noexcept
-        : std::runtime_error(makeMessage(errorId, extraMessage))
-    {}
-};
-
-class CommonDialogError : public std::runtime_error
+std::string WindowsError::makeMessage(const std::string& extraMessage) noexcept
 {
-    // CommDlgExtendedError reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646916
+    return makeMessage(GetLastError(), extraMessage);
+}
 
-protected:
-    static std::string getErrorMessage(unsigned long errorId)
-    try
+std::string WindowsError::makeMessage(unsigned long errorId) noexcept
+try
+{
+    const std::string errorMessage(toString(getErrorMessage(errorId)));
+    return "Win32 API error occurred, error code " + std::to_string(errorId) + ": " + errorMessage;
+}
+catch (...)
+{
+    return "Win32 API error occurred. Unknown error. An exception was thrown during error message construction.";
+}
+
+std::string WindowsError::makeMessage(unsigned long errorId, const std::string& extraMessage) noexcept
+try
+{
+    return makeMessage(errorId) + ' ' + extraMessage;
+}
+catch (...)
+{
+    return "Win32 API error occurred. Unknown error. An exception was thrown during error message construction.";
+}
+
+WindowsError::WindowsError() noexcept
+    : std::runtime_error(makeMessage())
+{}
+
+WindowsError::WindowsError(unsigned long errorId) noexcept
+    : std::runtime_error(makeMessage(errorId))
+{}
+
+WindowsError::WindowsError(const std::string& extraMessage) noexcept
+    : std::runtime_error(makeMessage(extraMessage))
+{}
+
+WindowsError::WindowsError(unsigned long errorId, const std::string& extraMessage) noexcept
+    : std::runtime_error(makeMessage(errorId, extraMessage))
+{}
+
+
+// CommonDialogError
+std::string CommonDialogError::getErrorMessage(unsigned long errorId)
+try
+{
+    switch (errorId)
     {
-        switch (errorId)
-        {
-        default:
-            return "Unknown error."s;
+    default:
+        return "Unknown error."s;
 
-        case CDERR_DIALOGFAILURE:
-            return "CDERR_DIALOGFAILURE: The dialog box could not be created. The common dialog box function's call to the DialogBox function failed. For example, this error occurs if the common dialog box call specifies an invalid window handle."s;
+    case CDERR_DIALOGFAILURE:
+        return "CDERR_DIALOGFAILURE: The dialog box could not be created. The common dialog box function's call to the DialogBox function failed. For example, this error occurs if the common dialog box call specifies an invalid window handle."s;
 
-        case CDERR_FINDRESFAILURE:
-            return "CDERR_FINDRESFAILURE: The common dialog box function failed to find a specified resource."s;
+    case CDERR_FINDRESFAILURE:
+        return "CDERR_FINDRESFAILURE: The common dialog box function failed to find a specified resource."s;
 
-        case CDERR_INITIALIZATION:
-            return "CDERR_INITIALIZATION: The common dialog box function failed during initialization. This error often occurs when sufficient memory is not available."s;
+    case CDERR_INITIALIZATION:
+        return "CDERR_INITIALIZATION: The common dialog box function failed during initialization. This error often occurs when sufficient memory is not available."s;
 
-        case CDERR_LOADRESFAILURE:
-            return "CDERR_LOADRESFAILURE: The common dialog box function failed to load a specified resource."s;
+    case CDERR_LOADRESFAILURE:
+        return "CDERR_LOADRESFAILURE: The common dialog box function failed to load a specified resource."s;
 
-        case CDERR_LOADSTRFAILURE:
-            return "CDERR_LOADSTRFAILURE: The common dialog box function failed to load a specified string."s;
+    case CDERR_LOADSTRFAILURE:
+        return "CDERR_LOADSTRFAILURE: The common dialog box function failed to load a specified string."s;
 
-        case CDERR_LOCKRESFAILURE:
-            return "CDERR_LOCKRESFAILURE: The common dialog box function failed to lock a specified resource."s;
+    case CDERR_LOCKRESFAILURE:
+        return "CDERR_LOCKRESFAILURE: The common dialog box function failed to lock a specified resource."s;
 
-        case CDERR_MEMALLOCFAILURE:
-            return "CDERR_MEMALLOCFAILURE: The common dialog box function was unable to allocate memory for internal structures."s;
+    case CDERR_MEMALLOCFAILURE:
+        return "CDERR_MEMALLOCFAILURE: The common dialog box function was unable to allocate memory for internal structures."s;
 
-        case CDERR_MEMLOCKFAILURE:
-            return "CDERR_MEMLOCKFAILURE: The common dialog box function was unable to lock the memory associated with a handle."s;
+    case CDERR_MEMLOCKFAILURE:
+        return "CDERR_MEMLOCKFAILURE: The common dialog box function was unable to lock the memory associated with a handle."s;
 
-        case CDERR_NOHINSTANCE:
-            return "CDERR_NOHINSTANCE: The ENABLETEMPLATE flag was set in the Flags member of the initialization structure for the corresponding common dialog box, but you failed to provide a corresponding instance handle."s;
+    case CDERR_NOHINSTANCE:
+        return "CDERR_NOHINSTANCE: The ENABLETEMPLATE flag was set in the Flags member of the initialization structure for the corresponding common dialog box, but you failed to provide a corresponding instance handle."s;
 
-        case CDERR_NOHOOK: 
-            return "CDERR_NOHOOK: The ENABLEHOOK flag was set in the Flags member of the initialization structure for the corresponding common dialog box, but you failed to provide a pointer to a corresponding hook procedure."s;
+    case CDERR_NOHOOK: 
+        return "CDERR_NOHOOK: The ENABLEHOOK flag was set in the Flags member of the initialization structure for the corresponding common dialog box, but you failed to provide a pointer to a corresponding hook procedure."s;
 
-        case CDERR_NOTEMPLATE:
-            return "CDERR_NOTEMPLATE: The ENABLETEMPLATE flag was set in the Flags member of the initialization structure for the corresponding common dialog box, but you failed to provide a corresponding template."s;
+    case CDERR_NOTEMPLATE:
+        return "CDERR_NOTEMPLATE: The ENABLETEMPLATE flag was set in the Flags member of the initialization structure for the corresponding common dialog box, but you failed to provide a corresponding template."s;
 
-        case CDERR_REGISTERMSGFAIL:
-            return "CDERR_REGISTERMSGFAIL: The RegisterWindowMessage function returned an error code when it was called by the common dialog box function."s;
+    case CDERR_REGISTERMSGFAIL:
+        return "CDERR_REGISTERMSGFAIL: The RegisterWindowMessage function returned an error code when it was called by the common dialog box function."s;
 
-        case CDERR_STRUCTSIZE:
-            return "CDERR_STRUCTSIZE: The lStructSize member of the initialization structure for the corresponding common dialog box is invalid."s;
+    case CDERR_STRUCTSIZE:
+        return "CDERR_STRUCTSIZE: The lStructSize member of the initialization structure for the corresponding common dialog box is invalid."s;
 
-        case CFERR_MAXLESSTHANMIN:
-            return "CFERR_MAXLESSTHANMIN: The size specified in the nSizeMax member of the CHOOSEFONT structure is less than the size specified in the nSizeMin member."s;
+    case CFERR_MAXLESSTHANMIN:
+        return "CFERR_MAXLESSTHANMIN: The size specified in the nSizeMax member of the CHOOSEFONT structure is less than the size specified in the nSizeMin member."s;
 
-        case CFERR_NOFONTS:
-            return "CFERR_NOFONTS: No fonts exist."s;
+    case CFERR_NOFONTS:
+        return "CFERR_NOFONTS: No fonts exist."s;
 
-        case FNERR_BUFFERTOOSMALL:
-            return "FNERR_BUFFERTOOSMALL: The buffer pointed to by the lpstrFile member of the OPENFILENAME structure is too small for the file name specified by the user. The first two bytes of the lpstrFile buffer contain an integer value specifying the size required to receive the full name, in characters."s;
+    case FNERR_BUFFERTOOSMALL:
+        return "FNERR_BUFFERTOOSMALL: The buffer pointed to by the lpstrFile member of the OPENFILENAME structure is too small for the file name specified by the user. The first two bytes of the lpstrFile buffer contain an integer value specifying the size required to receive the full name, in characters."s;
 
-        case FNERR_INVALIDFILENAME:
-            return "FNERR_INVALIDFILENAME: A file name is invalid."s;
+    case FNERR_INVALIDFILENAME:
+        return "FNERR_INVALIDFILENAME: A file name is invalid."s;
 
-        case FNERR_SUBCLASSFAILURE:
-            return "FNERR_SUBCLASSFAILURE: An attempt to subclass a list box failed because sufficient memory was not available."s;
+    case FNERR_SUBCLASSFAILURE:
+        return "FNERR_SUBCLASSFAILURE: An attempt to subclass a list box failed because sufficient memory was not available."s;
 
-        case FRERR_BUFFERLENGTHZERO:
-            return "FRERR_BUFFERLENGTHZERO: A member of the FINDREPLACE structure points to an invalid buffer."s;
-        }
+    case FRERR_BUFFERLENGTHZERO:
+        return "FRERR_BUFFERLENGTHZERO: A member of the FINDREPLACE structure points to an invalid buffer."s;
     }
-    LOG_RETHROW
+}
+LOG_RETHROW
 
-    static std::string makeMessage() noexcept
-    {
-        return makeMessage(CommDlgExtendedError());
-    }
+std::string CommonDialogError::makeMessage() noexcept
+{
+    return makeMessage(CommDlgExtendedError());
+}
 
-    static std::string makeMessage(const std::string& extraMessage) noexcept
-    {
-        return makeMessage(CommDlgExtendedError(), extraMessage);
-    }
+std::string CommonDialogError::makeMessage(const std::string& extraMessage) noexcept
+{
+    return makeMessage(CommDlgExtendedError(), extraMessage);
+}
 
-    static std::string makeMessage(unsigned long errorId) noexcept
-    try
-    {
-        const std::string errorMessage(getErrorMessage(errorId));
-        return "Win32 API common dialog box error occurred, error code " + std::to_string(errorId) + ": " + errorMessage;
-    }
-    catch (...)
-    {
-        return "Win32 API common dialog box error occurred. Unknown error. An exception was thrown during error message construction.";
-    }
+std::string CommonDialogError::makeMessage(unsigned long errorId) noexcept
+try
+{
+    const std::string errorMessage(getErrorMessage(errorId));
+    return "Win32 API common dialog box error occurred, error code " + std::to_string(errorId) + ": " + errorMessage;
+}
+catch (...)
+{
+    return "Win32 API common dialog box error occurred. Unknown error. An exception was thrown during error message construction.";
+}
 
-    static std::string makeMessage(unsigned long errorId, const std::string& extraMessage) noexcept
-    try
-    {
-        return makeMessage(errorId) + ' ' + extraMessage;
-    }
-    catch (...)
-    {
-        return "Win32 API common dialog box error occurred. Unknown error. An exception was thrown during error message construction.";
-    }
+std::string CommonDialogError::makeMessage(unsigned long errorId, const std::string& extraMessage) noexcept
+try
+{
+    return makeMessage(errorId) + ' ' + extraMessage;
+}
+catch (...)
+{
+    return "Win32 API common dialog box error occurred. Unknown error. An exception was thrown during error message construction.";
+}
 
-public:
-    CommonDialogError() noexcept
-        : std::runtime_error(makeMessage())
-    {}
+CommonDialogError::CommonDialogError() noexcept
+    : std::runtime_error(makeMessage())
+{}
 
-    CommonDialogError(unsigned long errorId) noexcept
-        : std::runtime_error(makeMessage(errorId))
-    {}
+CommonDialogError::CommonDialogError(unsigned long errorId) noexcept
+    : std::runtime_error(makeMessage(errorId))
+{}
 
-    CommonDialogError(const std::string& extraMessage) noexcept
-        : std::runtime_error(makeMessage(extraMessage))
-    {}
+CommonDialogError::CommonDialogError(const std::string& extraMessage) noexcept
+    : std::runtime_error(makeMessage(extraMessage))
+{}
 
-    CommonDialogError(unsigned long errorId, const std::string& extraMessage) noexcept
-        : std::runtime_error(makeMessage(errorId, extraMessage))
-    {}
-};
+CommonDialogError::CommonDialogError(unsigned long errorId, const std::string& extraMessage) noexcept
+    : std::runtime_error(makeMessage(errorId, extraMessage))
+{}
+
 
 namespace Menu
 {
@@ -1038,7 +1028,7 @@ try
             p_levelView = std::make_unique<LevelView>(*this);
 
         p_levelView->destroy();
-        p_levelView->create(x, y, width, height);
+        p_levelView->create(x, y, width, height, window);
     }
 
     {
@@ -1052,7 +1042,7 @@ try
             p_roomSelectorTree = std::make_unique<RoomSelectorTree>(*this);
 
         p_roomSelectorTree->destroy();
-        p_roomSelectorTree->create(x, y, width, height);
+        p_roomSelectorTree->create(x, y, width, height, window);
     }
 }
 LOG_RETHROW
@@ -1346,72 +1336,15 @@ catch (const std::exception& e)
 
 Windows::LevelView::LevelView(Windows& windows)
 try
-    : windows(windows)
+    : Window(windows)
 {
-    // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
-    // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
-    // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
-    // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
-    // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
-
     p_levelView = this;
-    
-    WNDCLASSEXW wcex{};
-    wcex.cbSize = sizeof(wcex);
-    wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
-    wcex.lpfnWndProc = windowProcedure;
-    wcex.hInstance = windows.instance;
-    wcex.hbrBackground = CreateSolidBrush(0x000000);
-    if (!wcex.hbrBackground)
-        throw WindowsError(LOG_INFO "Failed to create background brush");
-
-    wcex.lpszClassName = className;
-    ATOM registeredClass(RegisterClassEx(&wcex));
-    if (!registeredClass)
-        throw WindowsError(LOG_INFO "Failed to register level view window class");
-}
-LOG_RETHROW
-
-void Windows::LevelView::create(int x, int y, int width, int height)
-try
-{
-    // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
-    // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
-    // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
-
-    const unsigned long exStyle(WS_EX_WINDOWEDGE);
-    const wchar_t* const titleString{};
-    const unsigned long style(WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL);
-    HMENU const menu{};
-    void* const param{};
-    window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windows.window, menu, windows.instance, param);
-    if (!window)
-        throw WindowsError(LOG_INFO "Failed to create level view window");
-}
-LOG_RETHROW
-
-void Windows::LevelView::destroy()
-try
-{
-    // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
-
-    if (!window)
-        return;
-
-    if (!DestroyWindow(window))
-        throw WindowsError(LOG_INFO "Failed to destroy level view window");
-
-    window = nullptr;
 }
 LOG_RETHROW
 
 
 // RoomSelectorTree
-Windows::RoomSelectorTree::RoomSelectorTree(Windows& windows) noexcept
-    : windows(windows)
-{}
-
-void Windows::RoomSelectorTree::insertRoomList(const std::vector<Rom::RoomList>& roomLists, HTREEITEM parent = TVI_ROOT)
+void Windows::RoomSelectorTree::insertRoomList(const std::vector<Rom::RoomList>& roomLists, HTREEITEM parent /*= TVI_ROOT*/)
 try
 {
     // TreeView_InsertItem reference: https://docs.microsoft.com/en-us/windows/desktop/api/Commctrl/nf-commctrl-treeview_insertitem
@@ -1432,41 +1365,6 @@ try
 
         insertRoomList(roomList.subrooms, item);
     }
-}
-LOG_RETHROW
-
-void Windows::RoomSelectorTree::create(int x, int y, int width, int height)
-try
-{
-    // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
-    // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
-
-    const unsigned long exStyle{};
-    const wchar_t* const className(WC_TREEVIEW);
-    const wchar_t* const titleString{};
-    const unsigned long style(WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL | TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT);
-    HMENU const menu{};
-    void* const param{};
-    window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windows.window, menu, windows.instance, param);
-    if (!window)
-        throw WindowsError(LOG_INFO "Failed to create room selector tree window"s);
-
-    insertRoomList(windows.p_rom->getRoomList());
-}
-LOG_RETHROW
-
-void Windows::RoomSelectorTree::destroy()
-try
-{
-    // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
-
-    if (!window)
-        return;
-
-    if (!DestroyWindow(window))
-        throw WindowsError(LOG_INFO "Failed to destroy room selector tree window");
-
-    window = nullptr;
 }
 LOG_RETHROW
 
@@ -1525,29 +1423,9 @@ catch (const std::exception& e)
 
 Windows::SpritemapViewer::SpritemapViewer(Windows& windows)
 try
-    : windows(windows)
+    : Window(windows)
 {
-    // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
-    // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
-    // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
-    // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
-    // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
-
     p_spritemapViewer = this;
-
-    WNDCLASSEXW wcex{};
-    wcex.cbSize = sizeof(wcex);
-    wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
-    wcex.lpfnWndProc = windowProcedure;
-    wcex.hInstance = windows.instance;
-    wcex.hbrBackground = CreateSolidBrush(0x000000);
-    if (!wcex.hbrBackground)
-        throw WindowsError(LOG_INFO "Failed to create background brush");
-
-    wcex.lpszClassName = className;
-    ATOM registeredClass(RegisterClassEx(&wcex));
-    if (!registeredClass)
-        throw WindowsError(LOG_INFO "Failed to register spritemap viewer window class");
 }
 LOG_RETHROW
 
@@ -1558,31 +1436,10 @@ try
     // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
     // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
 
-    const unsigned long exStyle(WS_EX_WINDOWEDGE);
-    const unsigned long style(WS_TILEDWINDOW | WS_VISIBLE);
-    HMENU const menu{};
-    void* const param{};
     const int x(CW_USEDEFAULT), y(CW_USEDEFAULT), width(CW_USEDEFAULT), height(CW_USEDEFAULT);
-    window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, windows.window, menu, windows.instance, param);
-    if (!window)
-        throw WindowsError(LOG_INFO "Failed to create spritemap viewer window");
+    Window::create(x, y, width, height, window);
 
     createChildWindows();
-}
-LOG_RETHROW
-
-void Windows::SpritemapViewer::destroy()
-try
-{
-    // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
-
-    if (!window)
-        return;
-
-    if (!DestroyWindow(window))
-        throw WindowsError(LOG_INFO "Failed to destroy spritemap viewer window");
-
-    window = nullptr;
 }
 LOG_RETHROW
 
@@ -1757,60 +1614,8 @@ catch (const std::exception& e)
 
 Windows::SpritemapViewer::SpritemapView::SpritemapView(Windows& windows)
 try
-    : windows(windows)
+    : Window(windows)
 {
-    // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
-    // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
-    // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
-    // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
-    // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
-
     p_spritemapView = this;
-
-    WNDCLASSEXW wcex{};
-    wcex.cbSize = sizeof(wcex);
-    wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
-    wcex.lpfnWndProc = windowProcedure;
-    wcex.hInstance = windows.instance;
-    wcex.hbrBackground = CreateSolidBrush(0x000000);
-    if (!wcex.hbrBackground)
-        throw WindowsError(LOG_INFO "Failed to create background brush");
-
-    wcex.lpszClassName = className;
-    ATOM registeredClass(RegisterClassEx(&wcex));
-    if (!registeredClass)
-        throw WindowsError(LOG_INFO "Failed to register spritemap view window class");
-}
-LOG_RETHROW
-
-void Windows::SpritemapViewer::SpritemapView::create(int x, int y, int width, int height, HWND hwnd)
-try
-{
-    // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
-    // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
-    // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
-
-    const unsigned long exStyle(WS_EX_WINDOWEDGE);
-    const unsigned long style(WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL);
-    HMENU const menu{};
-    void* const param{};
-    window = CreateWindowEx(exStyle, className, titleString, style, x, y, width, height, hwnd, menu, windows.instance, param);
-    if (!window)
-        throw WindowsError(LOG_INFO "Failed to create spritemap view window");
-}
-LOG_RETHROW
-
-void Windows::SpritemapViewer::SpritemapView::destroy()
-try
-{
-    // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
-
-    if (!window)
-        return;
-
-    if (!DestroyWindow(window))
-        throw WindowsError(LOG_INFO "Failed to destroy spritemap view window");
-
-    window = nullptr;
 }
 LOG_RETHROW

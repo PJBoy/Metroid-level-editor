@@ -11,81 +11,227 @@
 #include <windows.h>
 #include <commctrl.h>
 
+
+class WindowsError : public std::runtime_error
+{
+    // GetLastError reference: https://msdn.microsoft.com/en-gb/library/windows/desktop/ms679360
+
+protected:
+    static std::wstring getErrorMessage(unsigned long errorId);
+    static std::string makeMessage() noexcept;
+    static std::string makeMessage(const std::string& extraMessage) noexcept;
+    static std::string makeMessage(unsigned long errorId) noexcept;
+    static std::string makeMessage(unsigned long errorId, const std::string& extraMessage) noexcept;
+
+public:
+    WindowsError() noexcept;
+    WindowsError(unsigned long errorId) noexcept;
+    WindowsError(const std::string& extraMessage) noexcept;
+    WindowsError(unsigned long errorId, const std::string& extraMessage) noexcept;
+};
+
+class CommonDialogError : public std::runtime_error
+{
+    // CommDlgExtendedError reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646916
+
+protected:
+    static std::string getErrorMessage(unsigned long errorId);
+    static std::string makeMessage() noexcept;
+    static std::string makeMessage(const std::string& extraMessage) noexcept;
+    static std::string makeMessage(unsigned long errorId) noexcept;
+    static std::string makeMessage(unsigned long errorId, const std::string& extraMessage) noexcept;
+
+public:
+    CommonDialogError() noexcept;
+    CommonDialogError(unsigned long errorId) noexcept;
+    CommonDialogError(const std::string& extraMessage) noexcept;
+    CommonDialogError(unsigned long errorId, const std::string& extraMessage) noexcept;
+};
+
+
 class Windows final : public Os
 {
-    class LevelView
+    template<typename Derived>
+    class Window
     {
-        const inline static wchar_t* const className = L"LevelViewer";
+        // Derived class must have:
+        //     A static wide string constant named `titleString`
+        //     A static wide string constant named `className`
+        //     A static narrow string constant named `classDescription`
+        //     A static unsigned long style constant named `style`
+
+        // Derived class may have:
+        //     A static window procedure named `windowProcedure`
+    
+        Window(const Window&) = delete;
+        Window(Window&&) = delete;
+        Window& operator=(const Window&) = delete;
+        Window& operator=(Window&&) = delete;
+
+        struct detail
+        {
+            template<typename T, typename = void>
+            struct hasWindowProcedure
+                : std::false_type
+            {};
+
+            template<typename T>
+            struct hasWindowProcedure<T, std::void_t<decltype(T::windowProcedure)>>
+                : std::true_type
+            {};
+        };
+
+        template<typename T>
+        constexpr bool static hasWindowProcedure{detail::template hasWindowProcedure<T>::value};
+
+    protected:
+        Windows& windows;
+
+    public:
+        HWND window{};
+
+        Window(Windows& windows)
+        try
+            : windows(windows)
+        {
+            // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
+            // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
+            // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
+            // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
+            // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
+
+            if constexpr (hasWindowProcedure<Derived>)
+            {
+                WNDCLASSEXW wcex{};
+                wcex.cbSize = sizeof(wcex);
+                wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
+                wcex.lpfnWndProc = Derived::windowProcedure;
+                wcex.hInstance = windows.instance;
+                wcex.hbrBackground = CreateSolidBrush(0x000000);
+                if (!wcex.hbrBackground)
+                    throw WindowsError(LOG_INFO "Failed to create background brush");
+
+                wcex.lpszClassName = Derived::className;
+                ATOM registeredClass(RegisterClassEx(&wcex));
+                if (!registeredClass)
+                    throw WindowsError(LOG_INFO "Failed to register "s + Derived::classDescription + " window class"s);
+            }
+        }
+        LOG_RETHROW
+    
+        inline void create(int x, int y, int width, int height, HWND hwnd)
+        try
+        {
+            // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
+            // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
+            // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
+
+            const unsigned long exStyle(WS_EX_WINDOWEDGE);
+            const unsigned long style(Derived::style | WS_VISIBLE);
+            HMENU const menu{};
+            void* const param{};
+            window = CreateWindowEx(exStyle, Derived::className, Derived::titleString, style, x, y, width, height, hwnd, menu, windows.instance, param);
+            if (!window)
+                throw WindowsError(LOG_INFO "Failed to create "s + Derived::classDescription + " window"s);
+        }
+        LOG_RETHROW
+    
+        inline void destroy()
+        try
+        {
+            // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
+
+            if (!window)
+                return;
+
+            if (!DestroyWindow(window))
+                throw WindowsError(LOG_INFO "Failed to destroy "s + Derived::classDescription + " window"s);
+
+            window = nullptr;
+        }
+        LOG_RETHROW
+    };
+
+    class LevelView : public Window<LevelView>
+    {
+        friend Window;
+
+        const inline static wchar_t
+            *const titleString = L"",
+            *const className = L"LevelViewer";
+        
+        const inline static std::string classDescription{"level viewer"};
+        const inline static unsigned long style{WS_CHILD | WS_HSCROLL | WS_VSCROLL};
 
         inline static LevelView* p_levelView;
-        Windows& windows;
 
         static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
 
     public:
-        HWND window{};
-        
         LevelView(Windows& windows);
-        LevelView(const LevelView&) = delete;
-        LevelView(LevelView&&) = delete;
-        LevelView& operator=(const LevelView&) = delete;
-        LevelView& operator=(LevelView&&) = delete;
-        void create(int x, int y, int width, int height);
-        void destroy();
     };
 
-    class RoomSelectorTree
+    class RoomSelectorTree : public Window<RoomSelectorTree>
     {
         // Tree view control reference: https://docs.microsoft.com/en-us/windows/desktop/controls/tree-view-control-reference
-        Windows& windows;
+        friend Window;
 
-        void insertRoomList(const std::vector<Rom::RoomList>& roomLists, HTREEITEM parent);
+        const inline static wchar_t
+            *const titleString = L"",
+            *const className = WC_TREEVIEW;
+
+        const inline static std::string classDescription{"room selector tree"};
+        const inline static unsigned long style{WS_CHILD | WS_HSCROLL | WS_VSCROLL | TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT};
+
+        void insertRoomList(const std::vector<Rom::RoomList>& roomLists, HTREEITEM parent = TVI_ROOT);
 
     public:
-        HWND window{};
-
-        RoomSelectorTree(Windows& windows) noexcept;
-        RoomSelectorTree(const RoomSelectorTree&) = delete;
-        RoomSelectorTree(RoomSelectorTree&&) = delete;
-        RoomSelectorTree& operator=(const RoomSelectorTree&) = delete;
-        RoomSelectorTree& operator=(RoomSelectorTree&&) = delete;
-        void create(int x, int y, int width, int height);
-        void destroy();
+        using Window::Window;
+    
+        inline void create(int x, int y, int width, int height, HWND hwnd)
+        try
+        {
+            Window::create(x, y, width, height, hwnd);
+            insertRoomList(windows.p_rom->getRoomList());
+        }
+        LOG_RETHROW
     };
 
-    class SpritemapViewer
+    class SpritemapViewer : public Window<SpritemapViewer>
     {
-        class SpritemapView
+        friend Window;
+
+        class SpritemapView : public Window<SpritemapView>
         {
-            const inline static wchar_t* const className = L"SpritemapView";
+            friend Window;
+
+            const inline static wchar_t
+                *const titleString = L"",
+                *const className = L"SpritemapView";
+
+            const inline static std::string classDescription{"spritemap view"};
+            const inline static unsigned long style{WS_CHILD | WS_HSCROLL | WS_VSCROLL};
 
             inline static SpritemapView* p_spritemapView;
-            Windows& windows;
 
             static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
 
         public:
-            HWND window{};
-
             SpritemapView(Windows& windows);
-            SpritemapView(const SpritemapView&) = delete;
-            SpritemapView(SpritemapView&&) = delete;
-            SpritemapView& operator=(const SpritemapView&) = delete;
-            SpritemapView& operator=(SpritemapView&&) = delete;
-            void create(int x, int y, int width, int height, HWND hwnd);
-            void destroy();
         };
 
         const inline static wchar_t
             *const titleString = L"Spritemap viewer",
             *const className = L"SpritemapViewer";
 
+        const inline static std::string classDescription{"spritemap view"};
+        const inline static unsigned long style{WS_TILEDWINDOW};
+
         const inline static float
             y_ratio_spritemapView{1},
             x_ratio_spritemapView{2./3};
 
         inline static SpritemapViewer* p_spritemapViewer;
-        Windows& windows;
         std::unique_ptr<SpritemapView> p_spritemapView;
 
         void createChildWindows();
@@ -93,15 +239,9 @@ class Windows final : public Os
         static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
 
     public:
-        HWND window{};
-
         SpritemapViewer(Windows& windows);
-        SpritemapViewer(const SpritemapViewer&) = delete;
-        SpritemapViewer(SpritemapViewer&&) = delete;
-        SpritemapViewer& operator=(const SpritemapViewer&) = delete;
-        SpritemapViewer& operator=(SpritemapViewer&&) = delete;
+
         void create();
-        void destroy();
     };
 
     // Constants //
