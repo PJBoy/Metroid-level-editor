@@ -5,6 +5,7 @@
 // Other Windows API reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ff818516
 // Window article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632598
 // Controls reference: https://docs.microsoft.com/en-us/windows/desktop/controls/window-controls
+// Control class names: https://docs.microsoft.com/en-us/windows/win32/controls/common-control-window-classes
     
 #include "os_windows.h"
 
@@ -1433,6 +1434,7 @@ try
         case EN_UPDATE:
         {
             // Edit_GetText reference: https://docs.microsoft.com/en-us/windows/win32/api/windowsx/nf-windowsx-edit_gettext
+            // InvalidateRect reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-invalidaterect
 
             std::wstring
                 tilesAddress(7, L'\0'),
@@ -1455,10 +1457,12 @@ try
             catch (const std::exception& e)
             {
                 DebugFile(DebugFile::info) << LOG_INFO << "Ignoring exception: " << e.what() << '\n';
+                p_spritemapViewer->p_statusBar->drawText(toWstring(e.what()));
                 break;
             }
 
-            // Invalidate window
+            p_spritemapViewer->p_statusBar->drawText(L"Success");
+
             if (!InvalidateRect(p_windows->p_spritemapViewer->window, nullptr, true))
                 throw WindowsError(LOG_INFO "Failed to invalidate spritemap viewer window"s);
 
@@ -1574,6 +1578,19 @@ try
 
     int x{}, y{}, width, height;
     const int margin = 4;
+
+    // Status bar
+    if (!p_statusBar)
+        p_statusBar = std::make_unique<StatusBarWindow>(windows);
+
+    p_statusBar->destroy();
+    p_statusBar->create({}, {}, {}, {}, window);
+
+    RECT statusRect;
+    if (!GetClientRect(p_statusBar->window, &statusRect))
+        throw WindowsError(LOG_INFO "Failed to get size of client area of spritemap viewer status bar window"s);
+
+    rect.bottom -= statusRect.bottom;
 
     // Spritemap view
     width  = int(rect.right  * x_ratio_spritemapView);

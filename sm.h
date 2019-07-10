@@ -460,7 +460,7 @@ private:
         {
             n_t n_entries = r.get<word_t>();
             if (n_entries > 128)
-                throw std::runtime_error(LOG_INFO "Invalid spritemap, too many entries: " + toHexString(n_entries));
+                throw std::runtime_error(LOG_INFO "Invalid spritemap, too many entries: " + toHexString<word_t>(n_entries));
 
             entries.reserve(n_entries);
             for (index_t i(n_entries); i --> 0;)

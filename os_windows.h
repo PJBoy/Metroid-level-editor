@@ -185,6 +185,34 @@ class Windows final : public Os
         LOG_RETHROW
     };
 
+    class StatusBarWindow : public Window<StatusBarWindow>
+    {
+        // Status bar reference: https://docs.microsoft.com/en-us/windows/win32/controls/status-bar-reference
+        friend Window;
+
+        const inline static wchar_t
+            *const titleString = L"",
+            *const className = STATUSCLASSNAME;
+
+        const inline static std::string classDescription{"status bar"};
+        const inline static unsigned long
+            style{WS_CHILD},
+            exStyle{};
+
+    public:
+        using Window::Window;
+
+        inline void drawText(std::wstring text)
+        {
+            // SendMessage reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessage
+            // InvalidateRect reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-invalidaterect
+
+            SendMessage(window, WM_SETTEXT, {}, LONG_PTR(std::data(text)));
+            if (!InvalidateRect(window, nullptr, true))
+                throw WindowsError(LOG_INFO "Failed to invalidate status bar window"s);
+        }
+    };
+
     template<typename Derived>
     class LabelWindow : public Window<Derived>
     {
@@ -395,6 +423,7 @@ class Windows final : public Os
 
         inline static SpritemapViewer* p_spritemapViewer;
 
+        std::unique_ptr<StatusBarWindow> p_statusBar;
         std::unique_ptr<SpritemapView> p_spritemapView;
         std::unique_ptr<SpritemapTilesView> p_spritemapTilesView;
         std::unique_ptr<TilesAddressLabel> p_tilesAddressLabel;
