@@ -42,54 +42,25 @@ LOG_RETHROW
 void Sm::drawSpritemapView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned scroll_x, unsigned scroll_y) const
 try
 {
-    const Pointer
-        p_tiles(0xAB'CC00_sm),
-        p_palette(0xA7'8687_sm),
-        p_spritemapData(0xA7'A5DF_sm);
-
-    Reader r(makeReader());
-
-    // Enemy tiles are loaded into the last 0x100 bytes, so I'm just going to mirror the two halves
-    tile_t tiles[0x200]{};
-    r.get<char, 1>(p_tiles, reinterpret_cast<char*>(tiles + 0x100), sizeof(tile_t) * 0x100);
-
-    palette_t palette(r.get<std::size(palette_t{}), word_t>(p_palette));
-
-    r.seek(p_spritemapData);
-    Spritemap spritemap(r);
-
-    const n_t width(256), height(256);
-    Cairo::RefPtr<Cairo::ImageSurface> p_spritemapSurface(Util::makeImageSurface(width, height));
-    {
-        Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_spritemapSurface));
-        /*
-        // Tile viewer
-        for (index_t y{}; y < std::size(tiles) / 0x10; ++y)
-            for (index_t x{}; x < 0x10; ++x)
-            {
-                Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[y * 0x10 + x], palette, false, false));
-                p_context->set_source(p_tileSurface, x * 8.0, y * 8.0);
-                p_context->paint();
-            }
-        /*/
-        // Spritemap viewer
-        for (index_t priority{}; priority < 4; ++priority)
-            for (const Spritemap::Entry& entry : spritemap.entries)
-                if (entry.priority == priority)
-                    for (index_t y{}; y <= n_t(entry.large); ++y)
-                        for (index_t x{}; x <= n_t(entry.large); ++x)
-                        {
-                            Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[entry.i_tile + y * 0x10 + x], palette, entry.flip_x, entry.flip_y));
-                            p_context->set_source(p_tileSurface, entry.offset_x + width / 2 + x * 8.0, entry.offset_y + height / 2 + y * 8.0);
-                            p_context->paint();
-                        }
-        //*/
-    }
-
+    if (!p_spritemapSurface)
+        return;
 
     Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_surface));
-    p_context->scale(3, 3);
+    p_context->scale(2, 2);
     p_context->set_source(p_spritemapSurface, -signed(scroll_x), -signed(scroll_y));
+    p_context->paint();
+}
+LOG_RETHROW
+
+void Sm::drawSpritemapTilesView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned scroll_x, unsigned scroll_y) const
+try
+{
+    if (!p_spritemapTilesSurface)
+        return;
+
+    Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_surface));
+    p_context->scale(2, 2);
+    p_context->set_source(p_spritemapTilesSurface, -signed(scroll_x), -signed(scroll_y));
     p_context->paint();
 }
 LOG_RETHROW
@@ -171,6 +142,14 @@ try
     Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_level));
     p_context->set_source(p_layer1, 0, 0);
     p_context->paint();
+}
+LOG_RETHROW
+
+void Sm::loadSpritemap(index_t tilesAddress, index_t palettesAddress, index_t spritemapAddress)
+try
+{
+    createSpritemapSurface(Pointer(tilesAddress), Pointer(palettesAddress), Pointer(spritemapAddress));
+    createSpritemapTilesSurface(Pointer(tilesAddress), Pointer(palettesAddress));
 }
 LOG_RETHROW
 
@@ -318,7 +297,7 @@ try
         const n_t n_blocks(levelDataSize / 2);
 
         if (std::size(decompressedData) != n_blocks * (2 + 1) + 2 && std::size(decompressedData) != n_blocks * (2 + 1 + 2) + 2)
-            throw std::runtime_error(LOG_INFO "Reported size of decompressed level data ("s + toHexString(n_blocks) + " blocks) isn't consistent with the actual size of decompressed level data ("s + toHexString(std::size(decompressedData)) + " bytes)"s);
+            DebugFile(DebugFile::warning) << LOG_INFO "Reported size of decompressed level data (" << toHexString(n_blocks) << " blocks) isn't consistent with the actual size of decompressed level data (" << toHexString(std::size(decompressedData)) << " bytes)";
 
         layer1 = Matrix<word_t>(n_y * 0x10, n_x * 0x10);
         std::copy_n(ByteCastIterator<word_t>(std::data(decompressedData) + 2), n_blocks, std::begin(layer1));
@@ -452,6 +431,66 @@ try
 {
     decompressTileset(i_tileset);
     createMetatileSurfaces();
+}
+LOG_RETHROW
+
+void Sm::createSpritemapSurface(Pointer p_tiles, Pointer p_palette, Pointer p_spritemapData)
+try
+{
+    Reader r(makeReader());
+
+    // Enemy tiles are loaded into the last 0x100 bytes
+    tile_t tiles[0x200]{};
+    r.get<char, 1>(p_tiles, reinterpret_cast<char*>(tiles + 0x100), sizeof(tile_t) * 0x100);
+
+    palette_t palette(r.get<std::size(palette_t{}), word_t>(p_palette));
+
+    r.seek(p_spritemapData);
+    Spritemap spritemap(r);
+
+    const n_t width(256), height(256), margin(0x20);
+    p_spritemapSurface = Util::makeImageSurface(width, height);
+    {
+        Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_spritemapSurface));
+
+        for (index_t priority{}; priority < 4; ++priority)
+            for (const Spritemap::Entry& entry : spritemap.entries)
+                if (entry.priority == priority)
+                    for (index_t y{}; y <= n_t(entry.large); ++y)
+                        for (index_t x{}; x <= n_t(entry.large); ++x)
+                        {
+                            Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[entry.i_tile + y * 0x10 + x], palette, entry.flip_x, entry.flip_y));
+                            p_context->set_source(p_tileSurface, entry.offset_x + margin + x * 8.0, entry.offset_y + margin + y * 8.0);
+                            p_context->paint();
+                        }
+    }
+}
+LOG_RETHROW
+
+void Sm::createSpritemapTilesSurface(Pointer p_tiles, Pointer p_palette)
+try
+{
+    Reader r(makeReader());
+
+    // Enemy tiles are loaded into the last 0x100 bytes
+    tile_t tiles[0x200]{};
+    r.get<char, 1>(p_tiles, reinterpret_cast<char*>(tiles + 0x100), sizeof(tile_t) * 0x100);
+
+    palette_t palette(r.get<std::size(palette_t{}), word_t>(p_palette));
+
+    const n_t width(0x80), height(std::size(tiles) / 0x10 * 8);
+    p_spritemapTilesSurface = Util::makeImageSurface(width, height);
+    {
+        Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_spritemapTilesSurface));
+        
+        for (index_t y{}; y < std::size(tiles) / 0x10; ++y)
+            for (index_t x{}; x < 0x10; ++x)
+            {
+                Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[y * 0x10 + x], palette, false, false));
+                p_context->set_source(p_tileSurface, x * 8.0, y * 8.0);
+                p_context->paint();
+            }
+    }
 }
 LOG_RETHROW
 

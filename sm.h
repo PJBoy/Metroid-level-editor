@@ -459,6 +459,9 @@ private:
         explicit Spritemap(Reader& r)
         {
             n_t n_entries = r.get<word_t>();
+            if (n_entries > 128)
+                throw std::runtime_error(LOG_INFO "Invalid spritemap, too many entries: " + toHexString(n_entries));
+
             entries.reserve(n_entries);
             for (index_t i(n_entries); i --> 0;)
                 entries.push_back(Entry(r));
@@ -503,6 +506,7 @@ private:
     Cairo::RefPtr<Cairo::ImageSurface> metatileSurfaces[0x400];
     Cairo::RefPtr<Cairo::ImageSurface> p_layer1, p_layer2;
     Cairo::RefPtr<Cairo::ImageSurface> p_level;
+    Cairo::RefPtr<Cairo::ImageSurface> p_spritemapSurface, p_spritemapTilesSurface;
     std::vector<std::pair<Pointer, RoomHeader>> knownRoomHeaders;
     LevelData levelData;
 
@@ -512,6 +516,9 @@ private:
     void createMetatileSurfaces();
     Cairo::RefPtr<Cairo::ImageSurface> createLayerSurface(const Matrix<word_t>& layer) const;
     void loadTileset(index_t i_tileset);
+
+    void createSpritemapSurface(Pointer p_tiles, Pointer p_palette, Pointer p_spritemapData);
+    void createSpritemapTilesSurface(Pointer p_tiles, Pointer p_palette);
     
     void findRoomHeaders();
 
@@ -520,9 +527,11 @@ public:
 
     virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
     virtual void drawSpritemapView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
+    virtual void drawSpritemapTilesView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
     virtual Dimensions getLevelViewDimensions() const override;
     virtual std::vector<RoomList> getRoomList() const override;
     virtual void loadLevelData(std::vector<long> ids) override;
+    virtual void loadSpritemap(index_t tilesAddress, index_t palettesAddress, index_t spritemapAddress) override;
 };
 
 constexpr Sm::Pointer operator"" _sm(unsigned long long pointer)

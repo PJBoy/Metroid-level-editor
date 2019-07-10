@@ -43,6 +43,8 @@ std::wstring toWstring(const std::string& from) noexcept
 }
 
 
+// Errors
+#if 1
 // WindowError
 std::wstring WindowsError::getErrorMessage(unsigned long errorId)
 try
@@ -227,6 +229,7 @@ CommonDialogError::CommonDialogError(const std::string& extraMessage) noexcept
 CommonDialogError::CommonDialogError(unsigned long errorId, const std::string& extraMessage) noexcept
     : std::runtime_error(makeMessage(errorId, extraMessage))
 {}
+#endif
 
 
 namespace Menu
@@ -841,6 +844,7 @@ try
 {
     // AddVectoredExceptionHandler reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms679274
     // LoadAccelerators reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646370
+    // CreateFont reference: https://docs.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-createfonta
 
     // Set Windows exception handler
     if (!AddVectoredExceptionHandler(~0ul, vectoredHandler))
@@ -859,7 +863,6 @@ try
     if (!std::freopen("CONOUT$", "w", stderr))
         throw std::runtime_error(LOG_INFO "Failed to redirect stderr");
 
-
     // Create main window
     registerClass();
     createWindow();
@@ -868,6 +871,11 @@ try
     accelerators = LoadAccelerators(instance, MAKEINTRESOURCE(IDC_METROIDLEVELEDITOR));
     if (!accelerators)
         throw WindowsError(LOG_INFO "Failed to load acclerators");
+
+    // Load monospace font
+    monospace = CreateFont(0, 0, 0, 0, FW_DONTCARE, false, false, false, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
+    if (!monospace )
+        throw WindowsError(LOG_INFO "Could not load monospace font"s);
 }
 LOG_RETHROW
 
@@ -948,24 +956,35 @@ int Windows::eventLoop()
 try
 {
     // Message article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644927
-    // GetMessage reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644936
     // WM_QUIT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644945
     // Accelerator reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645526
+    // GetMessage reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644936
+    // TranslateAccelerator reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-translateacceleratora
+    // TranslateMessage reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-translatemessage
+    // DispatchMessage reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-dispatchmessage
+    // IsDialogMessage reference: https://docs.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-isdialogmessagea
 
     for (;;)
     {
         MSG msg;
         const BOOL isNotQuit(GetMessage(&msg, nullptr, 0, 0));
+        
         if (isNotQuit == -1)
             throw WindowsError(LOG_INFO "Failed to get message");
+
         if (!isNotQuit)
             return static_cast<int>(msg.wParam);
 
-        if (!TranslateAccelerator(msg.hwnd, accelerators, &msg))
-        {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
+        // Intercept keyboard interface messages (in particular, tabs), which are sent to the spritemap controls (address inputs), so that they can be processed by the window (otherwise nothing happens)
+        // Note that this prevents arrow keys from working outside of navigating the controls for the spritemap viewer window (such as scrolling)
+        if (p_spritemapViewer && p_spritemapViewer->window && IsDialogMessage(p_spritemapViewer->window, &msg))
+            continue;
+        
+        if (TranslateAccelerator(msg.hwnd, accelerators, &msg))
+            continue;
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 }
 LOG_RETHROW
@@ -1114,6 +1133,20 @@ try
                 p_spritemapViewer = std::make_unique<SpritemapViewer>(*this);
             else
                 p_spritemapViewer->destroy();
+
+            // if window has been destroyed by e.g. close button, destroy fails because of call on invalid window handle;
+            // I'm destroying the window here because I haven't made support for multiple spritemap viewers open,
+            // which would require a different method of accessing member variables from the window procedure (than the static instance pointer)...
+            // probably a map from window handle to instance pointer.
+
+            // I could add a hook on the destroy notification to clear the window handle, but the result would be messy w.r.t. inheritence;
+            // would rather remove this call to destroy instead.
+            // Then again, the destroy method should be able to handle destruction at any point, changing ROM will destroy the windows and can happen at any time.
+            
+            // Maybe use a windows API function to check if the handle is valid? Not my preferred option...
+            // Maybe there is a tidy way of adding a window destruction hook?
+            // Possible approach: make base window precedure that looks up message in a map from message to handler, initialised with a destruction handler, and derived classes have to add to the map.
+            // Has a small runtime overhead compared to a switch-case, but it would work
 
             p_spritemapViewer->create();
 
@@ -1384,6 +1417,84 @@ try
     {
     default:
         return defaultHandler();
+
+    // WM_COMMAND reference: https://docs.microsoft.com/en-gb/windows/win32/menurc/wm-command
+    case WM_COMMAND:
+    {
+        if (lParam == 0)
+            return defaultHandler();
+
+        switch (HIWORD(wParam))
+        {
+        default:
+            return defaultHandler();
+
+        // EN_UPDATE reference: https://docs.microsoft.com/en-us/windows/win32/controls/en-update
+        case EN_UPDATE:
+        {
+            // Edit_GetText reference: https://docs.microsoft.com/en-us/windows/win32/api/windowsx/nf-windowsx-edit_gettext
+
+            std::wstring
+                tilesAddress(7, L'\0'),
+                palettesAddress(7, L'\0'),
+                spritemapAddress(7, L'\0');
+
+            Edit_GetText(p_spritemapViewer->p_tilesAddressInput->window,     std::data(tilesAddress),     int(std::size(tilesAddress)));
+            Edit_GetText(p_spritemapViewer->p_palettesAddressInput->window,  std::data(palettesAddress),  int(std::size(palettesAddress)));
+            Edit_GetText(p_spritemapViewer->p_spritemapAddressInput->window, std::data(spritemapAddress), int(std::size(spritemapAddress)));
+
+            try
+            {
+                p_spritemapViewer->windows.p_rom->loadSpritemap
+                (
+                    std::stoul(tilesAddress,     nullptr, 0x10),
+                    std::stoul(palettesAddress,  nullptr, 0x10),
+                    std::stoul(spritemapAddress, nullptr, 0x10)
+                );
+            }
+            catch (const std::exception& e)
+            {
+                DebugFile(DebugFile::info) << LOG_INFO << "Ignoring exception: " << e.what() << '\n';
+                break;
+            }
+
+            // Invalidate window
+            if (!InvalidateRect(p_windows->p_spritemapViewer->window, nullptr, true))
+                throw WindowsError(LOG_INFO "Failed to invalidate spritemap viewer window"s);
+
+            break;
+        }
+        }
+
+        break;
+    }
+
+    // WM_ACTIVATE reference: https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-activate
+    case WM_ACTIVATE:
+    {
+        // Save the previously active input when switching windows
+
+        const unsigned short activationStatus(LOWORD(wParam));
+
+        if (activationStatus == WA_INACTIVE)
+            p_spritemapViewer->activeInput = GetFocus();
+
+        break;
+    }
+
+    // WM_SETFOCUS reference: https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-setfocus
+    case WM_SETFOCUS:
+    {
+        // SetFocus reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setfocus
+
+        // Restore the previously active input when returning to window
+
+        if (p_spritemapViewer->activeInput)
+            if (!SetFocus(p_spritemapViewer->activeInput))
+                throw WindowsError(LOG_INFO "Failed to set keyboard focus after returning to window");
+
+        break;
+    }
         
     // WM_PAINT reference: https://msdn.microsoft.com/en-us/library/dd145213
     case WM_PAINT:
@@ -1461,19 +1572,107 @@ try
     if (!GetClientRect(window, &rect))
         throw WindowsError(LOG_INFO "Failed to get size of client area of spritemap viewer window"s);
 
-    {
-        const int
-            x(0),
-            y(0),
-            width(int(rect.right * x_ratio_spritemapView)),
-            height(int(rect.bottom * y_ratio_spritemapView));
+    int x{}, y{}, width, height;
+    const int margin = 4;
 
-        if (!p_spritemapView)
-            p_spritemapView = std::make_unique<SpritemapView>(windows);
+    // Spritemap view
+    width  = int(rect.right  * x_ratio_spritemapView);
+    height = int(rect.bottom * y_ratio_spritemapView);
 
-        p_spritemapView->destroy();
-        p_spritemapView->create(x, y, width, height, window);
-    }
+    if (!p_spritemapView)
+        p_spritemapView = std::make_unique<SpritemapView>(windows);
+
+    p_spritemapView->destroy();
+    p_spritemapView->create(x, y, width, height, window);
+
+    // Right pane
+    x += width + margin;
+    y = 0;
+    const int x_rightPane = x;
+
+    // Tiles address label
+    width  = int(x_length_addressLabel);
+    height = int(y_length_addressLabel);
+
+    if (!p_tilesAddressLabel)
+        p_tilesAddressLabel = std::make_unique<TilesAddressLabel>(windows);
+
+    p_tilesAddressLabel->destroy();
+    p_tilesAddressLabel->create(x, y, width, height, window);
+
+    // Tiles address input, has default focus
+    x += width;
+    width  = int(x_length_addressInput);
+    height = int(y_length_addressInput);
+
+    if (!p_tilesAddressInput)
+        p_tilesAddressInput = std::make_unique<TilesAddressInput>(windows);
+
+    p_tilesAddressInput->destroy();
+    p_tilesAddressInput->create(x, y, width, height, window);
+    if (!SetFocus(p_tilesAddressInput->window))
+        throw WindowsError(LOG_INFO "Failed to set keyboard focus after creating window");
+
+    // Palettes address
+    x = x_rightPane;
+    y += height + margin;
+    width  = int(x_length_addressLabel);
+    height = int(y_length_addressLabel);
+
+    if (!p_palettesAddressLabel)
+        p_palettesAddressLabel = std::make_unique<PaletteAddressLabel>(windows);
+
+    p_palettesAddressLabel->destroy();
+    p_palettesAddressLabel->create(x, y, width, height, window);
+
+    // Palettes address input
+    x += width;
+    width  = int(x_length_addressInput);
+    height = int(y_length_addressInput);
+
+    if (!p_palettesAddressInput)
+        p_palettesAddressInput = std::make_unique<PaletteAddressInput>(windows);
+
+    p_palettesAddressInput->destroy();
+    p_palettesAddressInput->create(x, y, width, height, window);
+
+    // Spritemap address
+    x = x_rightPane;
+    y += height + margin;
+    width  = int(x_length_addressLabel);
+    height = int(y_length_addressLabel);
+
+    if (!p_spritemapAddressLabel)
+        p_spritemapAddressLabel = std::make_unique<SpritemapAddressLabel>(windows);
+
+    p_spritemapAddressLabel->destroy();
+    p_spritemapAddressLabel->create(x, y, width, height, window);
+
+    // Spritemap address input
+    x += width;
+    width  = int(x_length_addressInput);
+    height = int(y_length_addressInput);
+
+    if (!p_spritemapAddressInput)
+        p_spritemapAddressInput = std::make_unique<SpritemapAddressInput>(windows);
+
+    p_spritemapAddressInput->destroy();
+    p_spritemapAddressInput->create(x, y, width, height, window);
+
+    // Spritemap tiles view
+    x = x_rightPane;
+    y += height + margin;
+    width  = int(x_length_spritemapTiles);
+    height = int(y_length_spritemapTiles);
+
+    if (!p_spritemapTilesView)
+        p_spritemapTilesView = std::make_unique<SpritemapTilesView>(windows);
+
+    p_spritemapTilesView->destroy();
+    p_spritemapTilesView->create(x, y, width, height, window);
+
+    // TEMP:
+    windows.p_rom->loadSpritemap(0xAB'CC00, 0xA7'8687, 0xA7'A5DF);
 }
 LOG_RETHROW
 
@@ -1617,5 +1816,139 @@ try
     : Window(windows)
 {
     p_spritemapView = this;
+}
+LOG_RETHROW
+
+
+// SpritemapTilesView
+LRESULT CALLBACK Windows::SpritemapViewer::SpritemapTilesView::windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
+try
+{
+    // Window procedure reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632593
+
+    const auto defaultHandler([&]()
+    {
+        return DefWindowProc(window, message, wParam, lParam);
+    });
+
+    switch (message)
+    {
+    default:
+        return defaultHandler();
+
+     // WM_PAINT reference: https://msdn.microsoft.com/en-us/library/dd145213
+    case WM_PAINT:
+    {
+        // GetUpdateRect reference: https://msdn.microsoft.com/en-us/library/dd144943
+
+        RECT updateRect;
+        BOOL notEmpty(GetUpdateRect(window, &updateRect, false));
+        if (notEmpty)
+        {
+            // BeginPaint reference: https://msdn.microsoft.com/en-us/library/dd183362
+            // EndPaint reference: https://msdn.microsoft.com/en-us/library/dd162598
+            // SCROLLINFO reference: https://docs.microsoft.com/en-gb/windows/desktop/api/winuser/ns-winuser-tagscrollinfo
+            // GetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getscrollinfo
+
+            PAINTSTRUCT ps;
+            const auto endPaint([&](HDC)
+            {
+                EndPaint(window, &ps);
+            });
+            const std::unique_ptr p_displayContext(makeUniquePtr(BeginPaint(window, &ps), endPaint));
+            if (!p_displayContext)
+                throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint"s);
+
+            // Get scroll position and pass it
+        /*
+            SCROLLINFO si;
+            si.cbSize = sizeof(si);
+            si.fMask = SIF_POS;
+
+            if (!GetScrollInfo(p_spritemapViewer->window, SB_VERT, &si))
+                throw WindowsError(LOG_INFO "Could not get vertical scroll info"s);
+
+            unsigned y(si.nPos);
+
+            if (!GetScrollInfo(p_spritemapViewer->window, SB_HORZ, &si))
+                throw WindowsError(LOG_INFO "Could not get horizontal scroll info"s);
+
+            unsigned x(si.nPos);
+        /*/
+            const unsigned x{}, y{};
+        //*/
+
+            p_windows->p_rom->drawSpritemapTilesView(Cairo::Win32Surface::create(p_displayContext.get()), x, y);
+        }
+
+        break;
+    }
+    }
+
+    return 0;
+}
+catch (const std::exception& e)
+{
+    DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
+    return DefWindowProc(window, message, wParam, lParam);
+}
+
+Windows::SpritemapViewer::SpritemapTilesView::SpritemapTilesView(Windows& windows)
+try
+    : Window(windows)
+{
+    p_spritemapTilesView = this;
+}
+LOG_RETHROW
+
+
+// LabelWindows
+Windows::SpritemapViewer::TilesAddressLabel::TilesAddressLabel(Windows& windows)
+try
+    : LabelWindow(windows)
+{
+    p_tilesAddressLabel = this;
+}
+LOG_RETHROW
+
+Windows::SpritemapViewer::PaletteAddressLabel::PaletteAddressLabel(Windows& windows)
+try
+    : LabelWindow(windows)
+{
+    p_paletteAddressLabel = this;
+}
+LOG_RETHROW
+
+Windows::SpritemapViewer::SpritemapAddressLabel::SpritemapAddressLabel(Windows& windows)
+try
+    : LabelWindow(windows)
+{
+    p_spritemapAddressLabel = this;
+}
+LOG_RETHROW
+
+
+// AddressEditWindows
+Windows::SpritemapViewer::TilesAddressInput::TilesAddressInput(Windows& windows)
+try
+    : AddressEditWindow(windows)
+{
+    p_tilesAddressInput = this;
+}
+LOG_RETHROW
+
+Windows::SpritemapViewer::PaletteAddressInput::PaletteAddressInput(Windows& windows)
+try
+    : AddressEditWindow(windows)
+{
+    p_paletteAddressInput = this;
+}
+LOG_RETHROW
+
+Windows::SpritemapViewer::SpritemapAddressInput::SpritemapAddressInput(Windows& windows)
+try
+    : AddressEditWindow(windows)
+{
+    p_spritemapAddressInput = this;
 }
 LOG_RETHROW

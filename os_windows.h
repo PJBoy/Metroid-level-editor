@@ -10,6 +10,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commctrl.h>
+#include <windowsx.h>
 
 
 class WindowsError : public std::runtime_error
@@ -58,6 +59,7 @@ class Windows final : public Os
         //     A static wide string constant named `titleString`
         //     A static wide string constant named `className`
         //     A static narrow string constant named `classDescription`
+        //     A static unsigned long style constant named `exStyle`
         //     A static unsigned long style constant named `style`
 
         // Derived class may have:
@@ -119,18 +121,18 @@ class Windows final : public Os
         }
         LOG_RETHROW
     
-        inline void create(int x, int y, int width, int height, HWND hwnd)
+        inline void create(int x, int y, int width, int height, HWND parentWindow)
         try
         {
             // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
             // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
             // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
 
-            const unsigned long exStyle(WS_EX_WINDOWEDGE);
+            const unsigned long exStyle(Derived::exStyle);
             const unsigned long style(Derived::style | WS_VISIBLE);
             HMENU const menu{};
             void* const param{};
-            window = CreateWindowEx(exStyle, Derived::className, Derived::titleString, style, x, y, width, height, hwnd, menu, windows.instance, param);
+            window = CreateWindowEx(exStyle, Derived::className, Derived::titleString, style, x, y, width, height, parentWindow, menu, windows.instance, param);
             if (!window)
                 throw WindowsError(LOG_INFO "Failed to create "s + Derived::classDescription + " window"s);
         }
@@ -152,6 +154,63 @@ class Windows final : public Os
         LOG_RETHROW
     };
 
+    template<typename Derived, n_t n_digits>
+    class AddressEditWindow : public Window<Derived>
+    {
+        // Edit control reference: https://docs.microsoft.com/en-us/windows/win32/controls/edit-controls
+        friend Window;
+
+        const inline static wchar_t
+            *const titleString = L"",
+            *const className = WC_EDIT;
+
+        const inline static unsigned long
+            style{WS_CHILD | WS_TABSTOP},
+            exStyle{};
+
+    public:
+        using Window<Derived>::Window;
+
+        inline void create(int x, int y, int width, int height, HWND parentWindow)
+        try
+        {
+            Window<Derived>::create(x, y, width, height, parentWindow);
+
+            // SendMessage reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessage
+            // WM_FONT reference: https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-setfont
+            // EM_LIMITTEXT reference: https://docs.microsoft.com/en-us/windows/win32/controls/em-limittext
+            SendMessage(Window<Derived>::window, WM_SETFONT, std::uintptr_t(p_windows->monospace), true);
+            Edit_LimitText(Window<Derived>::window, n_digits);
+        }
+        LOG_RETHROW
+    };
+
+    template<typename Derived>
+    class LabelWindow : public Window<Derived>
+    {
+        // Static control reference: https://docs.microsoft.com/en-us/windows/win32/controls/static-controls
+        friend Window;
+
+        const inline static wchar_t* const className = WC_STATIC;
+        const inline static unsigned long
+            style{WS_CHILD},
+            exStyle{};
+
+    public:
+        using Window<Derived>::Window;
+
+        inline void create(int x, int y, int width, int height, HWND parentWindow)
+            try
+        {
+            Window<Derived>::create(x, y, width, height, parentWindow);
+
+            // SendMessage reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessage
+
+        }
+        LOG_RETHROW
+    };
+
+
     class LevelView : public Window<LevelView>
     {
         friend Window;
@@ -161,7 +220,9 @@ class Windows final : public Os
             *const className = L"LevelViewer";
         
         const inline static std::string classDescription{"level viewer"};
-        const inline static unsigned long style{WS_CHILD | WS_HSCROLL | WS_VSCROLL};
+        const inline static unsigned long
+            style{WS_CHILD | WS_HSCROLL | WS_VSCROLL},
+            exStyle{WS_EX_WINDOWEDGE};
 
         inline static LevelView* p_levelView;
 
@@ -181,7 +242,9 @@ class Windows final : public Os
             *const className = WC_TREEVIEW;
 
         const inline static std::string classDescription{"room selector tree"};
-        const inline static unsigned long style{WS_CHILD | WS_HSCROLL | WS_VSCROLL | TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT};
+        const inline static unsigned long
+            style{WS_CHILD | WS_HSCROLL | WS_VSCROLL | TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT},
+            exStyle{WS_EX_WINDOWEDGE};
 
         void insertRoomList(const std::vector<Rom::RoomList>& roomLists, HTREEITEM parent = TVI_ROOT);
 
@@ -210,7 +273,9 @@ class Windows final : public Os
                 *const className = L"SpritemapView";
 
             const inline static std::string classDescription{"spritemap view"};
-            const inline static unsigned long style{WS_CHILD | WS_HSCROLL | WS_VSCROLL};
+            const inline static unsigned long
+                style{WS_CHILD | WS_HSCROLL | WS_VSCROLL},
+                exStyle{WS_EX_WINDOWEDGE};
 
             inline static SpritemapView* p_spritemapView;
 
@@ -220,19 +285,125 @@ class Windows final : public Os
             SpritemapView(Windows& windows);
         };
 
+        class SpritemapTilesView : public Window<SpritemapTilesView>
+        {
+            friend Window;
+
+            const inline static wchar_t
+                *const titleString = L"",
+                *const className = L"SpritemapTilesView";
+
+            const inline static std::string classDescription{"spritemap tiles view"};
+            const inline static unsigned long
+                style{WS_CHILD | WS_BORDER},
+                exStyle{WS_EX_WINDOWEDGE};
+
+            inline static SpritemapTilesView* p_spritemapTilesView;
+
+            static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
+
+        public:
+            SpritemapTilesView(Windows& windows);
+        };
+
+        class TilesAddressLabel : public LabelWindow<TilesAddressLabel>
+        {
+            friend Window;
+
+            const inline static wchar_t* const titleString = L"Tiles";
+            const inline static std::string classDescription{"tile address label"};
+            inline static TilesAddressLabel* p_tilesAddressLabel;
+
+        public:
+            TilesAddressLabel(Windows& windows);
+        };
+
+        class PaletteAddressLabel : public LabelWindow<PaletteAddressLabel>
+        {
+            friend Window;
+
+            const inline static wchar_t* const titleString = L"Palettes";
+            const inline static std::string classDescription{"palette address label"};
+            inline static PaletteAddressLabel* p_paletteAddressLabel;
+
+        public:
+            PaletteAddressLabel(Windows& windows);
+        };
+
+        class SpritemapAddressLabel : public LabelWindow<SpritemapAddressLabel>
+        {
+            friend Window;
+
+            const inline static wchar_t* const titleString = L"Spritemap";
+            const inline static std::string classDescription{"spritemap address label"};
+            inline static SpritemapAddressLabel* p_spritemapAddressLabel;
+
+        public:
+            SpritemapAddressLabel(Windows& windows);
+        };
+
+        class TilesAddressInput : public AddressEditWindow<TilesAddressInput, 6>
+        {
+            friend Window;
+            const inline static std::string classDescription{"tile address input"};
+            inline static TilesAddressInput* p_tilesAddressInput;
+
+        public:
+            TilesAddressInput(Windows& windows);
+        };
+
+        class PaletteAddressInput : public AddressEditWindow<PaletteAddressInput, 6>
+        {
+            friend Window;
+            const inline static std::string classDescription{"palette address input"};
+            inline static PaletteAddressInput* p_paletteAddressInput;
+
+        public:
+            PaletteAddressInput(Windows& windows);
+        };
+
+        class SpritemapAddressInput : public AddressEditWindow<SpritemapAddressInput, 6>
+        {
+            friend Window;
+            const inline static std::string classDescription{"spritemap address input"};
+            inline static SpritemapAddressInput* p_spritemapAddressInput;
+
+        public:
+            SpritemapAddressInput(Windows& windows);
+        };
+
         const inline static wchar_t
             *const titleString = L"Spritemap viewer",
             *const className = L"SpritemapViewer";
 
         const inline static std::string classDescription{"spritemap view"};
-        const inline static unsigned long style{WS_TILEDWINDOW};
+        const inline static unsigned long
+            style{WS_TILEDWINDOW},
+            exStyle{WS_EX_WINDOWEDGE};
 
         const inline static float
             y_ratio_spritemapView{1},
             x_ratio_spritemapView{2./3};
 
+        const inline static unsigned
+            y_length_spritemapTiles{0x200},
+            x_length_spritemapTiles{0x100},
+            y_length_addressLabel{19},
+            x_length_addressLabel{96},
+            y_length_addressInput{16},
+            x_length_addressInput{96};
+
         inline static SpritemapViewer* p_spritemapViewer;
+
         std::unique_ptr<SpritemapView> p_spritemapView;
+        std::unique_ptr<SpritemapTilesView> p_spritemapTilesView;
+        std::unique_ptr<TilesAddressLabel> p_tilesAddressLabel;
+        std::unique_ptr<PaletteAddressLabel> p_palettesAddressLabel;
+        std::unique_ptr<SpritemapAddressLabel> p_spritemapAddressLabel;
+        std::unique_ptr<TilesAddressInput> p_tilesAddressInput;
+        std::unique_ptr<PaletteAddressInput> p_palettesAddressInput;
+        std::unique_ptr<SpritemapAddressInput> p_spritemapAddressInput;
+        HWND activeInput{};
 
         void createChildWindows();
 
@@ -262,6 +433,7 @@ class Windows final : public Os
     int cmdShow; // Needed for createWindow
     HACCEL accelerators;
     Config& config; // Reference held to update recent files in response to file opening
+    HFONT monospace;
     std::unique_ptr<LevelView> p_levelView;
     std::unique_ptr<RoomSelectorTree> p_roomSelectorTree;
     std::unique_ptr<SpritemapViewer> p_spritemapViewer;
