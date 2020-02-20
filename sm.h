@@ -460,7 +460,7 @@ private:
         {
             n_t n_entries = r.get<word_t>();
             if (n_entries > 128)
-                throw std::runtime_error(LOG_INFO "Invalid spritemap, too many entries: " + toHexString<word_t>(n_entries));
+                throw std::runtime_error(LOG_INFO "Invalid spritemap, too many entries: " + toHexString(word_t(n_entries)));
 
             entries.reserve(n_entries);
             for (index_t i(n_entries); i --> 0;)
@@ -511,14 +511,14 @@ private:
     LevelData levelData;
 
     void decompressTileset(index_t i_tileset);
-    Cairo::RefPtr<Cairo::ImageSurface> createTileSurface(const tile_t& tile, const palette_t& palette, bool flip_x, bool flip_y) const;
+    Cairo::RefPtr<Cairo::ImageSurface> createTileSurface(const tile_t& tile, const palette_t& palette, bool flip_x = false, bool flip_y = false) const;
     Cairo::RefPtr<Cairo::ImageSurface> createMetatileSurface(const metatile_t& metatile) const;
     void createMetatileSurfaces();
     Cairo::RefPtr<Cairo::ImageSurface> createLayerSurface(const Matrix<word_t>& layer) const;
     void loadTileset(index_t i_tileset);
 
-    void createSpritemapSurface(Pointer p_tiles, Pointer p_palette, Pointer p_spritemapData);
-    void createSpritemapTilesSurface(Pointer p_tiles, Pointer p_palette);
+    void createSpritemapSurface(Pointer p_tiles, Pointer p_palette, Pointer p_spritemapData, index_t tilesDestAddress, index_t palettesDestAddress);
+    void createSpritemapTilesSurface(Pointer p_tiles, Pointer p_palette, index_t tilesDestAddress, index_t palettesDestAddress);
     
     void findRoomHeaders();
 
@@ -531,7 +531,7 @@ public:
     virtual Dimensions getLevelViewDimensions() const override;
     virtual std::vector<RoomList> getRoomList() const override;
     virtual void loadLevelData(std::vector<long> ids) override;
-    virtual void loadSpritemap(index_t tilesAddress, index_t palettesAddress, index_t spritemapAddress) override;
+    virtual void loadSpritemap(index_t tilesAddress, index_t palettesAddress, index_t spritemapAddress, index_t tilesDestAddress, index_t palettesDestAddress) override;
 };
 
 constexpr Sm::Pointer operator"" _sm(unsigned long long pointer)

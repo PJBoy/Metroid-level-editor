@@ -1037,33 +1037,19 @@ try
     if (!GetClientRect(window, &rect))
         throw WindowsError(LOG_INFO "Failed to get size of client area of main window"s);
 
-    {
-        const int
-            x(0),
-            y(0),
-            width(int(rect.right * x_ratio_levelEditor)),
-            height(int(rect.bottom * y_ratio_levelEditor));
+    if (!p_levelView)
+        p_levelView = std::make_unique<LevelView>(*this);
 
-        if (!p_levelView)
-            p_levelView = std::make_unique<LevelView>(*this);
+    if (!p_roomSelectorTree)
+        p_roomSelectorTree = std::make_unique<RoomSelectorTree>(*this);
 
-        p_levelView->destroy();
-        p_levelView->create(x, y, width, height, window);
-    }
+    WindowRow windowLayout
+    ({
+        {2./3, p_levelView.get()},
+        {1./3, p_roomSelectorTree.get()}
+    });
 
-    {
-        const int
-            x(int(rect.right * x_ratio_levelEditor)),
-            y(0),
-            width(int(rect.right * x_ratio_roomSelectorTree)),
-            height(int(rect.bottom * y_ratio_roomSelectorTree));
-
-        if (!p_roomSelectorTree)
-            p_roomSelectorTree = std::make_unique<RoomSelectorTree>(*this);
-
-        p_roomSelectorTree->destroy();
-        p_roomSelectorTree->create(x, y, width, height, window);
-    }
+    windowLayout.create(window, rect.right, rect.bottom);
 }
 LOG_RETHROW
 
@@ -1433,38 +1419,89 @@ try
         // EN_UPDATE reference: https://docs.microsoft.com/en-us/windows/win32/controls/en-update
         case EN_UPDATE:
         {
-            // Edit_GetText reference: https://docs.microsoft.com/en-us/windows/win32/api/windowsx/nf-windowsx-edit_gettext
-            // InvalidateRect reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-invalidaterect
+            if
+            (
+                   p_spritemapViewer->p_tilesAddressInput->isEmpty()
+                || p_spritemapViewer->p_palettesAddressInput->isEmpty()
+                || p_spritemapViewer->p_spritemapAddressInput->isEmpty()
+                || p_spritemapViewer->p_tilesDestAddressInput->isEmpty()
+                || p_spritemapViewer->p_palettesDestAddressInput->isEmpty()
+            )
+            {
+                p_spritemapViewer->p_statusBar->drawText(L"");
+                break;
+            }
 
-            std::wstring
-                tilesAddress(7, L'\0'),
-                palettesAddress(7, L'\0'),
-                spritemapAddress(7, L'\0');
-
-            Edit_GetText(p_spritemapViewer->p_tilesAddressInput->window,     std::data(tilesAddress),     int(std::size(tilesAddress)));
-            Edit_GetText(p_spritemapViewer->p_palettesAddressInput->window,  std::data(palettesAddress),  int(std::size(palettesAddress)));
-            Edit_GetText(p_spritemapViewer->p_spritemapAddressInput->window, std::data(spritemapAddress), int(std::size(spritemapAddress)));
+            unsigned long tilesAddress, palettesAddress, spritemapAddress, tilesDestAddress, palettesDestAddress;
 
             try
             {
-                p_spritemapViewer->windows.p_rom->loadSpritemap
-                (
-                    std::stoul(tilesAddress,     nullptr, 0x10),
-                    std::stoul(palettesAddress,  nullptr, 0x10),
-                    std::stoul(spritemapAddress, nullptr, 0x10)
-                );
+                tilesAddress = p_spritemapViewer->p_tilesAddressInput->getValue();
             }
             catch (const std::exception& e)
             {
-                DebugFile(DebugFile::info) << LOG_INFO << "Ignoring exception: " << e.what() << '\n';
+                LOG_IGNORE(e)
+                p_spritemapViewer->p_statusBar->drawText(L"Invalid value for tiles address");
+                break;
+            }
+
+            try
+            {
+                palettesAddress = p_spritemapViewer->p_palettesAddressInput->getValue();
+            }
+            catch (const std::exception& e)
+            {
+                LOG_IGNORE(e)
+                p_spritemapViewer->p_statusBar->drawText(L"Invalid value for palettes address");
+                break;
+            }
+
+            try
+            {
+                spritemapAddress = p_spritemapViewer->p_spritemapAddressInput->getValue();
+            }
+            catch (const std::exception& e)
+            {
+                LOG_IGNORE(e)
+                p_spritemapViewer->p_statusBar->drawText(L"Invalid value for spritemap address");
+                break;
+            }
+
+            try
+            {
+                tilesDestAddress = p_spritemapViewer->p_tilesDestAddressInput->getValue();
+            }
+            catch (const std::exception& e)
+            {
+                LOG_IGNORE(e)
+                p_spritemapViewer->p_statusBar->drawText(L"Invalid value for tiles dest address");
+                break;
+            }
+
+            try
+            {
+                palettesDestAddress = p_spritemapViewer->p_palettesDestAddressInput->getValue();
+            }
+            catch (const std::exception& e)
+            {
+                LOG_IGNORE(e)
+                p_spritemapViewer->p_statusBar->drawText(L"Invalid value for palettes dest address");
+                break;
+            }
+
+            try
+            {
+                p_spritemapViewer->windows.p_rom->loadSpritemap(tilesAddress, palettesAddress, spritemapAddress, tilesDestAddress, palettesDestAddress);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_IGNORE(e)
                 p_spritemapViewer->p_statusBar->drawText(toWstring(e.what()));
                 break;
             }
 
             p_spritemapViewer->p_statusBar->drawText(L"Success");
-
-            if (!InvalidateRect(p_windows->p_spritemapViewer->window, nullptr, true))
-                throw WindowsError(LOG_INFO "Failed to invalidate spritemap viewer window"s);
+            p_windows->p_spritemapViewer->invalidate();
 
             break;
         }
@@ -1565,6 +1602,7 @@ try
     // INITCOMMONCONTROLSEX reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/ns-commctrl-taginitcommoncontrolsex
     // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
     // InitCommonControlsEx reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/nf-commctrl-initcommoncontrolsex
+    // Edit_SetText reference: https://docs.microsoft.com/en-us/windows/win32/api/windowsx/nf-windowsx-edit_settext
 
     INITCOMMONCONTROLSEX iccs{};
     iccs.dwSize = sizeof(iccs);
@@ -1576,120 +1614,87 @@ try
     if (!GetClientRect(window, &rect))
         throw WindowsError(LOG_INFO "Failed to get size of client area of spritemap viewer window"s);
 
-    int x{}, y{}, width, height;
-    const int margin = 4;
-
-    // Status bar
     if (!p_statusBar)
         p_statusBar = std::make_unique<StatusBarWindow>(windows);
-
-    p_statusBar->destroy();
-    p_statusBar->create({}, {}, {}, {}, window);
-
-    RECT statusRect;
-    if (!GetClientRect(p_statusBar->window, &statusRect))
-        throw WindowsError(LOG_INFO "Failed to get size of client area of spritemap viewer status bar window"s);
-
-    rect.bottom -= statusRect.bottom;
-
-    // Spritemap view
-    width  = int(rect.right  * x_ratio_spritemapView);
-    height = int(rect.bottom * y_ratio_spritemapView);
 
     if (!p_spritemapView)
         p_spritemapView = std::make_unique<SpritemapView>(windows);
 
-    p_spritemapView->destroy();
-    p_spritemapView->create(x, y, width, height, window);
-
-    // Right pane
-    x += width + margin;
-    y = 0;
-    const int x_rightPane = x;
-
-    // Tiles address label
-    width  = int(x_length_addressLabel);
-    height = int(y_length_addressLabel);
-
     if (!p_tilesAddressLabel)
         p_tilesAddressLabel = std::make_unique<TilesAddressLabel>(windows);
-
-    p_tilesAddressLabel->destroy();
-    p_tilesAddressLabel->create(x, y, width, height, window);
-
-    // Tiles address input, has default focus
-    x += width;
-    width  = int(x_length_addressInput);
-    height = int(y_length_addressInput);
 
     if (!p_tilesAddressInput)
         p_tilesAddressInput = std::make_unique<TilesAddressInput>(windows);
 
-    p_tilesAddressInput->destroy();
-    p_tilesAddressInput->create(x, y, width, height, window);
-    if (!SetFocus(p_tilesAddressInput->window))
-        throw WindowsError(LOG_INFO "Failed to set keyboard focus after creating window");
+    if (!p_tilesDestAddressLabel)
+        p_tilesDestAddressLabel = std::make_unique<TilesDestAddressLabel>(windows);
 
-    // Palettes address
-    x = x_rightPane;
-    y += height + margin;
-    width  = int(x_length_addressLabel);
-    height = int(y_length_addressLabel);
+    if (!p_tilesDestAddressInput)
+        p_tilesDestAddressInput = std::make_unique<TilesDestAddressInput>(windows);
 
     if (!p_palettesAddressLabel)
         p_palettesAddressLabel = std::make_unique<PaletteAddressLabel>(windows);
 
-    p_palettesAddressLabel->destroy();
-    p_palettesAddressLabel->create(x, y, width, height, window);
-
-    // Palettes address input
-    x += width;
-    width  = int(x_length_addressInput);
-    height = int(y_length_addressInput);
-
     if (!p_palettesAddressInput)
         p_palettesAddressInput = std::make_unique<PaletteAddressInput>(windows);
 
-    p_palettesAddressInput->destroy();
-    p_palettesAddressInput->create(x, y, width, height, window);
+    if (!p_palettesDestAddressLabel)
+        p_palettesDestAddressLabel = std::make_unique<PaletteDestAddressLabel>(windows);
 
-    // Spritemap address
-    x = x_rightPane;
-    y += height + margin;
-    width  = int(x_length_addressLabel);
-    height = int(y_length_addressLabel);
+    if (!p_palettesDestAddressInput)
+        p_palettesDestAddressInput = std::make_unique<PaletteDestAddressInput>(windows);
 
     if (!p_spritemapAddressLabel)
         p_spritemapAddressLabel = std::make_unique<SpritemapAddressLabel>(windows);
 
-    p_spritemapAddressLabel->destroy();
-    p_spritemapAddressLabel->create(x, y, width, height, window);
-
-    // Spritemap address input
-    x += width;
-    width  = int(x_length_addressInput);
-    height = int(y_length_addressInput);
-
     if (!p_spritemapAddressInput)
         p_spritemapAddressInput = std::make_unique<SpritemapAddressInput>(windows);
-
-    p_spritemapAddressInput->destroy();
-    p_spritemapAddressInput->create(x, y, width, height, window);
-
-    // Spritemap tiles view
-    x = x_rightPane;
-    y += height + margin;
-    width  = int(x_length_spritemapTiles);
-    height = int(y_length_spritemapTiles);
 
     if (!p_spritemapTilesView)
         p_spritemapTilesView = std::make_unique<SpritemapTilesView>(windows);
 
-    p_spritemapTilesView->destroy();
-    p_spritemapTilesView->create(x, y, width, height, window);
+    // Status bar is exluded from the window layout because its size is managed automatically
+    p_statusBar->create({}, {}, {}, {}, window);
+    rect.bottom -= p_statusBar->getHeight();
 
-    // TEMP:
-    windows.p_rom->loadSpritemap(0xAB'CC00, 0xA7'8687, 0xA7'A5DF);
+    WindowRow windowLayout
+    ({
+        {1./3, WindowColumn::make
+        ({
+            {19, WindowRow::make
+            ({
+                {96, p_tilesAddressLabel.get()},
+                {96, WindowColumn::make({{16, p_tilesAddressInput.get()}})}, // edit control seems to have a minimum height, but the text does get cropped to the specified height, ugh
+                {20, p_tilesDestAddressLabel.get()},
+                {96, WindowColumn::make({{16, p_tilesDestAddressInput.get()}})}
+            })},
+            {19, WindowRow::make
+            ({
+                {96, p_palettesAddressLabel.get()},
+                {96, WindowColumn::make({{16, p_palettesAddressInput.get()}})},
+                {20, p_palettesDestAddressLabel.get()},
+                {96, WindowColumn::make({{16, p_palettesDestAddressInput.get()}})}
+            })},
+            {19, WindowRow::make
+            ({
+                {96, p_spritemapAddressLabel.get()},
+                {96, WindowColumn::make({{16, p_spritemapAddressInput.get()}})}
+            })},
+            {0x200, p_spritemapTilesView.get()}
+        }, 1)},
+        {2./3, p_spritemapView.get()}
+    });
+
+    windowLayout.create(window, rect.right, rect.bottom);
+    if (!SetFocus(p_tilesAddressInput->window))
+        throw WindowsError(LOG_INFO "Failed to set keyboard focus after creating spritemap window");
+
+    // Temp defaults:
+    Edit_SetText(p_tilesAddressInput->window,        L"ABCC00");
+    Edit_SetText(p_tilesDestAddressInput->window,    L"7000");
+    Edit_SetText(p_palettesAddressInput->window,     L"A78687");
+    Edit_SetText(p_palettesDestAddressInput->window, L"80");
+    Edit_SetText(p_spritemapAddressInput->window,    L"A7A5DF");
 }
 LOG_RETHROW
 
@@ -1944,6 +1949,22 @@ try
 }
 LOG_RETHROW
 
+Windows::SpritemapViewer::TilesDestAddressLabel::TilesDestAddressLabel(Windows& windows)
+try
+    : LabelWindow(windows)
+{
+    p_tilesDestAddressLabel = this;
+}
+LOG_RETHROW
+
+Windows::SpritemapViewer::PaletteDestAddressLabel::PaletteDestAddressLabel(Windows& windows)
+try
+    : LabelWindow(windows)
+{
+    p_paletteDestAddressLabel = this;
+}
+LOG_RETHROW
+
 
 // AddressEditWindows
 Windows::SpritemapViewer::TilesAddressInput::TilesAddressInput(Windows& windows)
@@ -1967,5 +1988,21 @@ try
     : AddressEditWindow(windows)
 {
     p_spritemapAddressInput = this;
+}
+LOG_RETHROW
+
+Windows::SpritemapViewer::TilesDestAddressInput::TilesDestAddressInput(Windows& windows)
+try
+    : AddressEditWindow(windows)
+{
+    p_tilesDestAddressInput = this;
+}
+LOG_RETHROW
+
+Windows::SpritemapViewer::PaletteDestAddressInput::PaletteDestAddressInput(Windows& windows)
+try
+    : AddressEditWindow(windows)
+{
+    p_paletteDestAddressInput = this;
 }
 LOG_RETHROW

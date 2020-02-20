@@ -3,6 +3,7 @@
 #include "os.h"
 
 #include "config.h"
+#include "matrix.h"
 
 #include "global.h"
 
@@ -11,6 +12,13 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <windowsx.h>
+
+#include <array>
+#include <initializer_list>
+#include <memory>
+#include <type_traits>
+#include <variant>
+#include <vector>
 
 
 class WindowsError : public std::runtime_error
@@ -52,8 +60,143 @@ public:
 
 class Windows final : public Os
 {
+    class WindowBase;
+
+    class WindowLayoutBase
+    {
+    public:
+        enum struct Orientation
+        {
+            horizontal,
+            vertical
+        };
+
+        enum struct LengthType
+        {
+            fraction,
+            fixed,
+            deduced
+        };
+
+        virtual ~WindowLayoutBase() = default;
+
+        virtual void create(HWND parentWindow, int parentWidth, int parentHeight, int x = 0, int y = 0) = 0;
+    };
+
+    template<WindowLayoutBase::Orientation orientation>
+    class WindowLayout : public WindowLayoutBase
+    {
+    public:
+        struct Element
+        {
+            std::variant<double, int, std::monostate> arg;
+            std::variant<WindowBase*, std::unique_ptr<WindowLayoutBase>> p_window;
+        };
+
+        constexpr static auto tag_fraction = std::in_place_index<0>;
+        constexpr static auto tag_fixed    = std::in_place_index<1>;
+        constexpr static auto tag_deduced  = std::in_place_index<2>;
+
+    private:
+        std::vector<Element> elements;
+        unsigned margin;
+
+    public:
+        template<n_t n>
+        static std::unique_ptr<WindowLayoutBase> make(Element (&&elements)[n], unsigned margin = 0)
+        {
+            return std::make_unique<WindowLayout>(std::move(elements), margin);
+        }
+
+        WindowLayout() = default;
+
+        template<n_t n>
+        explicit WindowLayout(Element (&&elements)[n], unsigned margin = 0)
+        try
+            : elements(std::make_move_iterator(std::begin(elements)), std::make_move_iterator(std::end(elements))), margin(margin)
+        {}
+        LOG_RETHROW
+
+        void create(HWND parentWindow, int parentWidth, int parentHeight, int x = 0, int y = 0) override
+        try
+        {
+            if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
+                parentWidth -= int(margin * (std::size(elements) - 1));
+            else
+                parentHeight -= int(margin * (std::size(elements) - 1));
+
+            for (const Element& element : elements)
+            {
+                int width, height;
+
+                if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
+                {
+                    if (std::holds_alternative<double>(element.arg))
+                        width = int(parentWidth * std::get<double>(element.arg));
+                    else
+                        width = std::get<int>(element.arg);
+
+                    height = parentHeight;
+                }
+                else
+                {
+                    width = parentWidth;
+                    if (std::holds_alternative<double>(element.arg))
+                        height = int(parentHeight * std::get<double>(element.arg));
+                    else
+                        height = std::get<int>(element.arg);
+                }
+
+                if (std::holds_alternative<WindowBase*>(element.p_window))
+                    std::get<WindowBase*>(element.p_window)->create(x, y, width, height, parentWindow);
+                else
+                    std::get<std::unique_ptr<WindowLayoutBase>>(element.p_window)->create(parentWindow, width, height, x, y);
+
+                if (std::holds_alternative<std::monostate>(element.arg))
+                {
+                    if (!std::holds_alternative<WindowBase*>(element.p_window))
+                        throw std::runtime_error("Using tag_deduced with a WindowLayout is not supported");
+
+                    if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
+                        x += std::get<WindowBase*>(element.p_window)->getWidth() + margin;
+                    else
+                        y += std::get<WindowBase*>(element.p_window)->getHeight() + margin;
+                }
+                else
+                {
+                    if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
+                        x += width + margin;
+                    else
+                        y += height + margin;
+                }
+            }
+        }
+        LOG_RETHROW
+    };
+
+    using WindowRow = WindowLayout<WindowLayoutBase::Orientation::horizontal>;
+    using WindowColumn = WindowLayout<WindowLayoutBase::Orientation::vertical>;
+
+    class WindowBase
+    {
+        WindowBase(const WindowBase&) = delete;
+        WindowBase(WindowBase&&) = delete;
+        WindowBase& operator=(const WindowBase&) = delete;
+        WindowBase& operator=(WindowBase&&) = delete;
+
+    public:
+        HWND window{};
+
+        WindowBase() = default;
+
+        virtual void create(int x, int y, int width, int height, HWND parentWindow) = 0;
+        // virtual void resize(int x, int y, int width, int height) = 0;
+        virtual int getWidth() const = 0;
+        virtual int getHeight() const = 0;
+    };
+
     template<typename Derived>
-    class Window
+    class Window : public WindowBase
     {
         // Derived class must have:
         //     A static wide string constant named `titleString`
@@ -64,11 +207,6 @@ class Windows final : public Os
 
         // Derived class may have:
         //     A static window procedure named `windowProcedure`
-    
-        Window(const Window&) = delete;
-        Window(Window&&) = delete;
-        Window& operator=(const Window&) = delete;
-        Window& operator=(Window&&) = delete;
 
         struct detail
         {
@@ -121,12 +259,15 @@ class Windows final : public Os
         }
         LOG_RETHROW
     
-        inline void create(int x, int y, int width, int height, HWND parentWindow)
+        inline void create(int x, int y, int width, int height, HWND parentWindow) override
         try
         {
             // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
             // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
             // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
+
+            if (window)
+                return;
 
             const unsigned long exStyle(Derived::exStyle);
             const unsigned long style(Derived::style | WS_VISIBLE);
@@ -137,6 +278,30 @@ class Windows final : public Os
                 throw WindowsError(LOG_INFO "Failed to create "s + Derived::classDescription + " window"s);
         }
         LOG_RETHROW
+
+        inline int getWidth() const
+        {
+            // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
+            // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
+
+            RECT rect;
+            if (!GetClientRect(window, &rect))
+                throw WindowsError(LOG_INFO "Failed to get size of client area of "s + Derived::classDescription + " window"s);
+
+            return rect.right;
+        }
+
+        inline int getHeight() const
+        {
+            // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
+            // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
+
+            RECT rect;
+            if (!GetClientRect(window, &rect))
+                throw WindowsError(LOG_INFO "Failed to get size of client area of "s + Derived::classDescription + " window"s);
+
+            return rect.bottom;
+        }
     
         inline void destroy()
         try
@@ -150,6 +315,15 @@ class Windows final : public Os
                 throw WindowsError(LOG_INFO "Failed to destroy "s + Derived::classDescription + " window"s);
 
             window = nullptr;
+        }
+        LOG_RETHROW
+
+        inline void invalidate()
+        try
+        {
+            // InvalidateRect reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-invalidaterect
+            if (!InvalidateRect(window, nullptr, true))
+                throw WindowsError(LOG_INFO "Failed to invalidate "s + Derived::classDescription + " window"s);
         }
         LOG_RETHROW
     };
@@ -183,6 +357,31 @@ class Windows final : public Os
             Edit_LimitText(Window<Derived>::window, n_digits);
         }
         LOG_RETHROW
+
+        inline unsigned long getValue() const
+        try
+        {
+            // Edit_GetText reference: https://docs.microsoft.com/en-us/windows/win32/api/windowsx/nf-windowsx-edit_gettext
+
+            std::wstring text(n_digits + 1, L'\0');
+            Edit_GetText(Window<Derived>::window, std::data(text), int(std::size(text)));
+            return std::stoul(text, nullptr, 0x10);
+        }
+        LOG_RETHROW
+
+        inline bool isEmpty() const
+        try
+        {
+            // Edit_GetTextLength reference: https://docs.microsoft.com/en-us/windows/win32/api/windowsx/nf-windowsx-edit_gettextlength
+
+            SetLastError(ERROR_SUCCESS);
+            const int length(Edit_GetTextLength(Window<Derived>::window));
+            if (GetLastError())
+                throw WindowsError(LOG_INFO "Failed to get "s + Derived::classDescription + " edit box length"s);
+
+            return length == 0;
+        }
+        LOG_RETHROW
     };
 
     class StatusBarWindow : public Window<StatusBarWindow>
@@ -206,10 +405,9 @@ class Windows final : public Os
         {
             // SendMessage reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessage
             // InvalidateRect reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-invalidaterect
+            // WM_SETTEXT reference: https://docs.microsoft.com/en-gb/windows/win32/winmsg/wm-settext
 
             SendMessage(window, WM_SETTEXT, {}, LONG_PTR(std::data(text)));
-            if (!InvalidateRect(window, nullptr, true))
-                throw WindowsError(LOG_INFO "Failed to invalidate status bar window"s);
         }
     };
 
@@ -237,7 +435,6 @@ class Windows final : public Os
         }
         LOG_RETHROW
     };
-
 
     class LevelView : public Window<LevelView>
     {
@@ -334,6 +531,7 @@ class Windows final : public Os
             SpritemapTilesView(Windows& windows);
         };
 
+
         class TilesAddressLabel : public LabelWindow<TilesAddressLabel>
         {
             friend Window;
@@ -370,9 +568,12 @@ class Windows final : public Os
             SpritemapAddressLabel(Windows& windows);
         };
 
+
         class TilesAddressInput : public AddressEditWindow<TilesAddressInput, 6>
         {
             friend Window;
+            friend AddressEditWindow;
+
             const inline static std::string classDescription{"tile address input"};
             inline static TilesAddressInput* p_tilesAddressInput;
 
@@ -383,6 +584,8 @@ class Windows final : public Os
         class PaletteAddressInput : public AddressEditWindow<PaletteAddressInput, 6>
         {
             friend Window;
+            friend AddressEditWindow;
+
             const inline static std::string classDescription{"palette address input"};
             inline static PaletteAddressInput* p_paletteAddressInput;
 
@@ -393,12 +596,65 @@ class Windows final : public Os
         class SpritemapAddressInput : public AddressEditWindow<SpritemapAddressInput, 6>
         {
             friend Window;
+            friend AddressEditWindow;
+
             const inline static std::string classDescription{"spritemap address input"};
             inline static SpritemapAddressInput* p_spritemapAddressInput;
 
         public:
             SpritemapAddressInput(Windows& windows);
         };
+
+        
+        class TilesDestAddressLabel : public LabelWindow<TilesDestAddressLabel>
+        {
+            friend Window;
+
+            const inline static wchar_t* const titleString = L" -> ";
+            const inline static std::string classDescription{"tile dest address label"};
+            inline static TilesDestAddressLabel* p_tilesDestAddressLabel;
+
+        public:
+            TilesDestAddressLabel(Windows& windows);
+        };
+
+        class PaletteDestAddressLabel : public LabelWindow<PaletteDestAddressLabel>
+        {
+            friend Window;
+
+            const inline static wchar_t* const titleString = L" -> ";
+            const inline static std::string classDescription{"palette dest address label"};
+            inline static PaletteDestAddressLabel* p_paletteDestAddressLabel;
+
+        public:
+            PaletteDestAddressLabel(Windows& windows);
+        };
+
+        
+        class TilesDestAddressInput : public AddressEditWindow<TilesDestAddressInput, 4>
+        {
+            friend Window;
+            friend AddressEditWindow;
+
+            const inline static std::string classDescription{"tile dest address input"};
+            inline static TilesDestAddressInput* p_tilesDestAddressInput;
+
+        public:
+            TilesDestAddressInput(Windows& windows);
+        };
+
+        class PaletteDestAddressInput : public AddressEditWindow<PaletteDestAddressInput, 4>
+        {
+            friend Window;
+            friend AddressEditWindow;
+
+            const inline static std::string classDescription{"palette dest address input"};
+            inline static PaletteDestAddressInput* p_paletteDestAddressInput;
+
+        public:
+            PaletteDestAddressInput(Windows& windows);
+        };
+
 
         const inline static wchar_t
             *const titleString = L"Spritemap viewer",
@@ -418,6 +674,7 @@ class Windows final : public Os
             x_length_spritemapTiles{0x100},
             y_length_addressLabel{19},
             x_length_addressLabel{96},
+            x_length_destAddressLabel{16},
             y_length_addressInput{16},
             x_length_addressInput{96};
 
@@ -432,6 +689,10 @@ class Windows final : public Os
         std::unique_ptr<TilesAddressInput> p_tilesAddressInput;
         std::unique_ptr<PaletteAddressInput> p_palettesAddressInput;
         std::unique_ptr<SpritemapAddressInput> p_spritemapAddressInput;
+        std::unique_ptr<TilesDestAddressInput> p_tilesDestAddressInput;
+        std::unique_ptr<PaletteDestAddressInput> p_palettesDestAddressInput;
+        std::unique_ptr<TilesDestAddressLabel> p_tilesDestAddressLabel;
+        std::unique_ptr<PaletteDestAddressLabel> p_palettesDestAddressLabel;
         HWND activeInput{};
 
         void createChildWindows();
@@ -451,9 +712,7 @@ class Windows final : public Os
 
     const inline static float
         y_ratio_levelEditor{1},
-        x_ratio_levelEditor{2./3},
-        y_ratio_roomSelectorTree{1},
-        x_ratio_roomSelectorTree{1./3};
+        y_ratio_roomSelectorTree{1};
 
     // Variables //
     inline static Windows* p_windows; // Provides access to this global state from callback functions

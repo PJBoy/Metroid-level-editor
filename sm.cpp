@@ -145,11 +145,49 @@ try
 }
 LOG_RETHROW
 
-void Sm::loadSpritemap(index_t tilesAddress, index_t palettesAddress, index_t spritemapAddress)
+void Sm::loadSpritemap(index_t tilesAddress, index_t palettesAddress, index_t spritemapAddress, index_t tilesDestAddress, index_t palettesDestAddress)
 try
 {
-    createSpritemapSurface(Pointer(tilesAddress), Pointer(palettesAddress), Pointer(spritemapAddress));
-    createSpritemapTilesSurface(Pointer(tilesAddress), Pointer(palettesAddress));
+    Pointer p_tilesAddress, p_palettesAddress, p_spritemapAddress, p_tilesDestAddress, p_palettesDestAddress;
+    
+    try
+    {
+        p_tilesAddress = Pointer(long_t(tilesAddress));
+    }
+    catch (const std::exception& e)
+    {
+        LOG_IGNORE(e);
+        throw std::runtime_error(LOG_INFO "Invalid SNES address for tiles address");
+    }
+
+    try
+    {
+        p_palettesAddress = Pointer(long_t(palettesAddress));
+    }
+    catch (const std::exception& e)
+    {
+        LOG_IGNORE(e);
+        throw std::runtime_error(LOG_INFO "Invalid SNES address for palettes address");
+    }
+
+    try
+    {
+        p_spritemapAddress = Pointer(long_t(spritemapAddress));
+    }
+    catch (const std::exception& e)
+    {
+        LOG_IGNORE(e);
+        throw std::runtime_error(LOG_INFO "Invalid SNES address for spritemap address");
+    }
+
+    if (tilesDestAddress < 0x6000 || tilesDestAddress >= 0x8000 || tilesDestAddress % 0x10 != 0)
+        throw std::runtime_error(LOG_INFO "Invalid VRAM address for tiles dest address");
+
+    if (palettesDestAddress < 0x80 || palettesDestAddress >= 0x100)
+        throw std::runtime_error(LOG_INFO "Invalid CGRAM address for palettes dest address");
+
+    createSpritemapSurface(p_tilesAddress, p_palettesAddress, p_spritemapAddress, tilesDestAddress, palettesDestAddress);
+    createSpritemapTilesSurface(p_tilesAddress, p_palettesAddress, tilesDestAddress, palettesDestAddress);
 }
 LOG_RETHROW
 
@@ -367,7 +405,7 @@ try
 }
 LOG_RETHROW
 
-Cairo::RefPtr<Cairo::ImageSurface> Sm::createTileSurface(const tile_t& tile, const palette_t& palette, bool flip_x, bool flip_y) const
+Cairo::RefPtr<Cairo::ImageSurface> Sm::createTileSurface(const tile_t& tile, const palette_t& palette, bool flip_x /*= false */, bool flip_y /*= false */) const
 try
 {
     Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(Util::makeImageSurface(8, 8));
@@ -434,21 +472,27 @@ try
 }
 LOG_RETHROW
 
-void Sm::createSpritemapSurface(Pointer p_tiles, Pointer p_palette, Pointer p_spritemapData)
+void Sm::createSpritemapSurface(Pointer p_tiles, Pointer p_palette, Pointer p_spritemapData, index_t tilesDestAddress, index_t palettesDestAddress)
 try
 {
+    constexpr Pointer
+        p_commonSpritePalettes(0x9A'8100_sm),
+        p_commonSpriteTiles(0x9A'D200_sm);
+
     Reader r(makeReader());
 
-    // Enemy tiles are loaded into the last 0x100 bytes
     tile_t tiles[0x200]{};
-    r.get<char, 1>(p_tiles, reinterpret_cast<char*>(tiles + 0x100), sizeof(tile_t) * 0x100);
+    r.get<char, 1>(p_commonSpriteTiles, reinterpret_cast<char*>(tiles), 0x2A00);
+    r.get<char, 1>(p_tiles, reinterpret_cast<char*>(tiles + (tilesDestAddress - 0x6000) / 0x10), sizeof(tile_t) * (0x8000 - tilesDestAddress) / 0x10);
 
-    palette_t palette(r.get<std::size(palette_t{}), word_t>(p_palette));
+    palette_t palettes[8]{};
+    r.get<char, 1>(p_commonSpritePalettes, reinterpret_cast<char*>(palettes), sizeof(palettes));
+    r.get<char, 1>(p_palette, reinterpret_cast<char*>(palettes) + (palettesDestAddress - 0x80) * 2, (0x100 - palettesDestAddress) * 2);
 
     r.seek(p_spritemapData);
     Spritemap spritemap(r);
 
-    const n_t width(256), height(256), margin(0x20);
+    const n_t width(256), height(256), margin(128);
     p_spritemapSurface = Util::makeImageSurface(width, height);
     {
         Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_spritemapSurface));
@@ -456,27 +500,47 @@ try
         for (index_t priority{}; priority < 4; ++priority)
             for (const Spritemap::Entry& entry : spritemap.entries)
                 if (entry.priority == priority)
-                    for (index_t y{}; y <= n_t(entry.large); ++y)
-                        for (index_t x{}; x <= n_t(entry.large); ++x)
-                        {
-                            Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[entry.i_tile + y * 0x10 + x], palette, entry.flip_x, entry.flip_y));
-                            p_context->set_source(p_tileSurface, entry.offset_x + margin + x * 8.0, entry.offset_y + margin + y * 8.0);
-                            p_context->paint();
-                        }
+                    if (!entry.large)
+                    {
+                        Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[entry.i_tile], palettes[entry.i_palette], entry.flip_x, entry.flip_y));
+                        p_context->set_source(p_tileSurface, double(entry.offset_x + margin), double(entry.offset_y + margin));
+                        p_context->paint();
+                    }
+                    else
+                    {
+                        Cairo::RefPtr<Cairo::ImageSurface> p_metatileSurface(Util::makeImageSurface(16, 16));
+                        for (index_t y{}; y <= n_t(entry.large); ++y)
+                            for (index_t x{}; x <= n_t(entry.large); ++x)
+                            {
+                                Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_metatileSurface));
+                                Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[entry.i_tile + y * 0x10 + x], palettes[entry.i_palette]));
+                                p_context->set_source(p_tileSurface, x * 8.0, y * 8.0);
+                                p_context->paint();
+                            }
+
+                        p_context->set_source(Util::flip(p_metatileSurface, entry.flip_x, entry.flip_y), double(entry.offset_x + margin), double(entry.offset_y + margin));
+                        p_context->paint();
+                    }
     }
 }
 LOG_RETHROW
 
-void Sm::createSpritemapTilesSurface(Pointer p_tiles, Pointer p_palette)
+void Sm::createSpritemapTilesSurface(Pointer p_tiles, Pointer p_palette, index_t tilesDestAddress, index_t palettesDestAddress)
 try
 {
+    constexpr Pointer
+        p_commonSpritePalettes(0x9A'8100_sm),
+        p_commonSpriteTiles(0x9A'D200_sm);
+
     Reader r(makeReader());
 
-    // Enemy tiles are loaded into the last 0x100 bytes
     tile_t tiles[0x200]{};
-    r.get<char, 1>(p_tiles, reinterpret_cast<char*>(tiles + 0x100), sizeof(tile_t) * 0x100);
+    r.get<char, 1>(p_commonSpriteTiles, reinterpret_cast<char*>(tiles), 0x2A00);
+    r.get<char, 1>(p_tiles, reinterpret_cast<char*>(tiles + (tilesDestAddress - 0x6000) / 0x10), sizeof(tile_t) * (0x8000 - tilesDestAddress) / 0x10);
 
-    palette_t palette(r.get<std::size(palette_t{}), word_t>(p_palette));
+    palette_t palettes[8]{};
+    r.get<char, 1>(p_commonSpritePalettes, reinterpret_cast<char*>(palettes), sizeof(palettes));
+    r.get<char, 1>(p_palette, reinterpret_cast<char*>(palettes) + (palettesDestAddress - 0x80) * 2, (0x100 - palettesDestAddress) * 2);
 
     const n_t width(0x80), height(std::size(tiles) / 0x10 * 8);
     p_spritemapTilesSurface = Util::makeImageSurface(width, height);
@@ -486,7 +550,7 @@ try
         for (index_t y{}; y < std::size(tiles) / 0x10; ++y)
             for (index_t x{}; x < 0x10; ++x)
             {
-                Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[y * 0x10 + x], palette, false, false));
+                Cairo::RefPtr<Cairo::ImageSurface> p_tileSurface(createTileSurface(tiles[y * 0x10 + x], palettes[0], false, false));
                 p_context->set_source(p_tileSurface, x * 8.0, y * 8.0);
                 p_context->paint();
             }

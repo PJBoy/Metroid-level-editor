@@ -143,5 +143,5 @@ auto Rom::getLevelViewDimensions() const -> Dimensions
 void Rom::loadLevelData(std::vector<long>)
 {}
 
-void Rom::loadSpritemap(index_t, index_t, index_t)
+void Rom::loadSpritemap(index_t, index_t, index_t, index_t, index_t)
 {}

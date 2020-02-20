@@ -1,12 +1,12 @@
 #pragma once
 
 #include <cstddef>
+#include <iomanip>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #define STRINGIFY(x) #x
 #define APPLY(f, x) f(x)

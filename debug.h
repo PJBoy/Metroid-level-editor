@@ -16,6 +16,9 @@
         throw; \
     }
 
+#define LOG_IGNORE(e) \
+    DebugFile(DebugFile::info) << LOG_INFO "Ignoring exception: " << (e).what() << '\n';
+
 class DebugFile : public std::ofstream
 {
     // MSVC bug: making this static variable inline causes the following const inline statics to be empty strings

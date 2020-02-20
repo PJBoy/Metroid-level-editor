@@ -171,5 +171,5 @@ public:
     virtual Dimensions getLevelViewDimensions() const;
     virtual std::vector<RoomList> getRoomList() const;
     virtual void loadLevelData(std::vector<long> ids);
-    virtual void loadSpritemap(index_t tilesAddress, index_t palettesAddress, index_t spritemapAddress);
+    virtual void loadSpritemap(index_t tilesAddress, index_t palettesAddress, index_t spritemapAddress, index_t tilesDestAddress, index_t palettesDestAddress);
 };
