@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <string>
 
 #define LOG_INFO __FILE__ ":" APPLY(STRINGIFY, __LINE__) " - "s
 #define LOG_RETHROW \

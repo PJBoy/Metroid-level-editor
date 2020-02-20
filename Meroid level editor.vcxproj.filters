@@ -16,6 +16,12 @@
     <Filter Include="Header Files\util">
       <UniqueIdentifier>{d94cd85b-5a50-4dc5-b6c9-563d00e89298}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\os_windows">
+      <UniqueIdentifier>{fbcada17-de63-4c64-b6dc-255dc9d12d9c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\os_windows\spritemap viewer">
+      <UniqueIdentifier>{c3bb8832-2ebc-4100-8d42-06ac6848c958}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">
@@ -62,9 +68,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="os_windows.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -88,6 +91,24 @@
     </ClCompile>
     <ClCompile Include="mzm.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="os_windows\main.cpp">
+      <Filter>Source Files\os_windows</Filter>
+    </ClCompile>
+    <ClCompile Include="os_windows\error.cpp">
+      <Filter>Source Files\os_windows</Filter>
+    </ClCompile>
+    <ClCompile Include="os_windows\level view.cpp">
+      <Filter>Source Files\os_windows</Filter>
+    </ClCompile>
+    <ClCompile Include="os_windows\spritemap viewer\main.cpp">
+      <Filter>Source Files\os_windows\spritemap viewer</Filter>
+    </ClCompile>
+    <ClCompile Include="os_windows\spritemap viewer\spritemap view.cpp">
+      <Filter>Source Files\os_windows\spritemap viewer</Filter>
+    </ClCompile>
+    <ClCompile Include="os_windows\spritemap viewer\spritemap tiles view.cpp">
+      <Filter>Source Files\os_windows\spritemap viewer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

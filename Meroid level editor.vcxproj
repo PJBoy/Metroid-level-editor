@@ -102,6 +102,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <ConformanceMode>true</ConformanceMode>
       <DisableSpecificWarnings>4305; 4456; 4458; 4554</DisableSpecificWarnings>
+      <ObjectFileName>$(IntDir)/%(RelativeDir)/</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -133,6 +134,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <ConformanceMode>true</ConformanceMode>
       <DisableSpecificWarnings>4305; 4456; 4458; 4554</DisableSpecificWarnings>
+      <ObjectFileName>$(IntDir)/%(RelativeDir)/</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -163,6 +165,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ConformanceMode>true</ConformanceMode>
       <DisableSpecificWarnings>4305; 4456; 4458; 4554</DisableSpecificWarnings>
+      <ObjectFileName>$(IntDir)/%(RelativeDir)/</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -195,6 +198,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ConformanceMode>true</ConformanceMode>
       <DisableSpecificWarnings>4305; 4456; 4458; 4554</DisableSpecificWarnings>
+      <ObjectFileName>$(IntDir)/%(RelativeDir)/</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -230,10 +234,15 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="mf.cpp" />
     <ClCompile Include="mzm.cpp" />
+    <ClCompile Include="os_windows\error.cpp" />
+    <ClCompile Include="os_windows\level view.cpp" />
+    <ClCompile Include="os_windows\main.cpp" />
+    <ClCompile Include="os_windows\spritemap viewer\main.cpp" />
+    <ClCompile Include="os_windows\spritemap viewer\spritemap tiles view.cpp" />
+    <ClCompile Include="os_windows\spritemap viewer\spritemap view.cpp" />
     <ClCompile Include="rom.cpp" />
     <ClCompile Include="sm.cpp" />
     <ClInclude Include="os.h" />
-    <ClCompile Include="os_windows.cpp" />
     <ClInclude Include="os_windows.h" />
   </ItemGroup>
   <ItemGroup>

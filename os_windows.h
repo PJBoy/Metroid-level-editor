@@ -14,11 +14,16 @@
 #include <windowsx.h>
 
 #include <array>
+#include <cstdint>
 #include <initializer_list>
 #include <memory>
 #include <type_traits>
 #include <variant>
 #include <vector>
+
+
+std::string toString(const std::wstring& from) noexcept;
+std::wstring toWstring(const std::string& from) noexcept;
 
 
 class WindowsError : public std::runtime_error
@@ -62,6 +67,7 @@ class Windows final : public Os
 {
     class WindowBase;
 
+    // Dynamically polymprhic window layout base class
     class WindowLayoutBase
     {
     public:
@@ -83,6 +89,7 @@ class Windows final : public Os
         virtual void create(HWND parentWindow, int parentWidth, int parentHeight, int x = 0, int y = 0) = 0;
     };
 
+    // Statically polymorphic window layout base class
     template<WindowLayoutBase::Orientation orientation>
     class WindowLayout : public WindowLayoutBase
     {
@@ -177,6 +184,7 @@ class Windows final : public Os
     using WindowRow = WindowLayout<WindowLayoutBase::Orientation::horizontal>;
     using WindowColumn = WindowLayout<WindowLayoutBase::Orientation::vertical>;
 
+    // Dynamically polymprhic window base class
     class WindowBase
     {
         WindowBase(const WindowBase&) = delete;
@@ -195,34 +203,31 @@ class Windows final : public Os
         virtual int getHeight() const = 0;
     };
 
+    // Statically polymorphic window base class
     template<typename Derived>
     class Window : public WindowBase
     {
         // Derived class must have:
-        //     A static wide string constant named `titleString`
-        //     A static wide string constant named `className`
+        //     `static wchar_t* titleString`
+        //     `static wchar_t* className`
+        //     `static unsigned long exStyle`
+        //     `static unsigned long style`
         //     A static narrow string constant named `classDescription`
-        //     A static unsigned long style constant named `exStyle`
-        //     A static unsigned long style constant named `style`
 
         // Derived class may have:
-        //     A static window procedure named `windowProcedure`
+        //     `static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam)`
 
         struct detail
         {
             template<typename T, typename = void>
-            struct hasWindowProcedure
-                : std::false_type
-            {};
+            constexpr static bool hasWindowProcedure{};
 
             template<typename T>
-            struct hasWindowProcedure<T, std::void_t<decltype(T::windowProcedure)>>
-                : std::true_type
-            {};
+            constexpr static bool hasWindowProcedure<T, std::void_t<decltype(T::windowProcedure)>>{true};
         };
 
         template<typename T>
-        constexpr bool static hasWindowProcedure{detail::template hasWindowProcedure<T>::value};
+        constexpr bool static hasWindowProcedure{detail::template hasWindowProcedure<T>};
 
     protected:
         Windows& windows;
@@ -328,6 +333,7 @@ class Windows final : public Os
         LOG_RETHROW
     };
 
+    // Window subclasses
     template<typename Derived, n_t n_digits>
     class AddressEditWindow : public Window<Derived>
     {
