@@ -154,6 +154,19 @@ try
         break;
     }
         
+    // WM_SIZE reference: https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-size
+    case WM_SIZE:
+    {
+        if (!p_spritemapViewer->p_windowLayout)
+            return defaultHandler();
+
+        if (wParam != SIZE_RESTORED && wParam != SIZE_MAXIMIZED)
+            return defaultHandler();
+
+        const int width(LOWORD(lParam)), height(HIWORD(lParam));
+        p_spritemapViewer->p_windowLayout->resize(width, height);
+    }
+
     // WM_PAINT reference: https://msdn.microsoft.com/en-us/library/dd145213
     case WM_PAINT:
     {
@@ -274,7 +287,7 @@ try
     p_statusBar->create({}, {}, {}, {}, window);
     rect.bottom -= p_statusBar->getHeight();
 
-    WindowRow windowLayout
+    p_windowLayout = WindowRow::make
     ({
         {1./3, WindowColumn::make
         ({
@@ -302,7 +315,7 @@ try
         {2./3, p_spritemapView.get()}
     });
 
-    windowLayout.create(window, rect.right, rect.bottom);
+    p_windowLayout->create(window, rect.right, rect.bottom);
     if (!SetFocus(p_tilesAddressInput->window))
         throw WindowsError(LOG_INFO "Failed to set keyboard focus after creating spritemap window");
 

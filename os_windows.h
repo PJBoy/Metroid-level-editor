@@ -71,11 +71,7 @@ class Windows final : public Os
     class WindowLayoutBase
     {
     public:
-        enum struct Orientation
-        {
-            horizontal,
-            vertical
-        };
+        using element_arg_types_t = std::tuple<double, int, std::monostate>;
 
         enum struct LengthType
         {
@@ -84,9 +80,16 @@ class Windows final : public Os
             deduced
         };
 
+        enum struct Orientation
+        {
+            horizontal,
+            vertical
+        };
+
         virtual ~WindowLayoutBase() = default;
 
         virtual void create(HWND parentWindow, int parentWidth, int parentHeight, int x = 0, int y = 0) = 0;
+        virtual void resize(int parentWidth, int parentHeight, int x = 0, int y = 0) = 0;
     };
 
     // Statically polymorphic window layout base class
@@ -94,27 +97,40 @@ class Windows final : public Os
     class WindowLayout : public WindowLayoutBase
     {
     public:
+        // Public nested classes
         struct Element
         {
-            std::variant<double, int, std::monostate> arg;
+            using element_arg_t =
+                std::variant
+                <
+                    std::tuple_element_t<toInt(LengthType::fraction), element_arg_types_t>, 
+                    std::tuple_element_t<toInt(LengthType::fixed),    element_arg_types_t>, 
+                    std::tuple_element_t<toInt(LengthType::deduced),  element_arg_types_t>
+                >;
+
+            element_arg_t arg;
             std::variant<WindowBase*, std::unique_ptr<WindowLayoutBase>> p_window;
         };
 
-        constexpr static auto tag_fraction = std::in_place_index<0>;
-        constexpr static auto tag_fixed    = std::in_place_index<1>;
-        constexpr static auto tag_deduced  = std::in_place_index<2>;
+        // Static member variables
+        constexpr static auto tag_fraction = std::in_place_index<toInt(LengthType::fraction)>;
+        constexpr static auto tag_fixed    = std::in_place_index<toInt(LengthType::fixed)>;
+        constexpr static auto tag_deduced  = std::in_place_index<toInt(LengthType::deduced)>;
 
     private:
+        // Non-static member variables
         std::vector<Element> elements;
         unsigned margin;
 
     public:
+        // Static member functions
         template<n_t n>
         static std::unique_ptr<WindowLayoutBase> make(Element (&&elements)[n], unsigned margin = 0)
         {
             return std::make_unique<WindowLayout>(std::move(elements), margin);
         }
 
+        // Non-static member functions
         WindowLayout() = default;
 
         template<n_t n>
@@ -127,6 +143,24 @@ class Windows final : public Os
         void create(HWND parentWindow, int parentWidth, int parentHeight, int x = 0, int y = 0) override
         try
         {
+            createOrResize<false>(parentWindow, parentWidth, parentHeight, x, y);
+        }
+        LOG_RETHROW
+
+        void resize(int parentWidth, int parentHeight, int x = 0, int y = 0) override
+        try
+        {
+            createOrResize<true>({}, parentWidth, parentHeight, x, y);
+        }
+        LOG_RETHROW
+
+        template<bool resize>
+        void createOrResize(HWND parentWindow, int parentWidth, int parentHeight, int x = 0, int y = 0)
+        try
+        {
+            if constexpr (resize)
+                (void)parentWindow;
+
             if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
                 parentWidth -= int(margin * (std::size(elements) - 1));
             else
@@ -138,7 +172,7 @@ class Windows final : public Os
 
                 if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
                 {
-                    if (std::holds_alternative<double>(element.arg))
+                    if (element.arg.index() == toInt(LengthType::fraction))
                         width = int(parentWidth * std::get<double>(element.arg));
                     else
                         width = std::get<int>(element.arg);
@@ -148,18 +182,24 @@ class Windows final : public Os
                 else
                 {
                     width = parentWidth;
-                    if (std::holds_alternative<double>(element.arg))
+                    if (element.arg.index() == toInt(LengthType::fraction))
                         height = int(parentHeight * std::get<double>(element.arg));
                     else
                         height = std::get<int>(element.arg);
                 }
 
                 if (std::holds_alternative<WindowBase*>(element.p_window))
-                    std::get<WindowBase*>(element.p_window)->create(x, y, width, height, parentWindow);
+                    if constexpr (resize)
+                        std::get<WindowBase*>(element.p_window)->resize(x, y, width, height);
+                    else
+                        std::get<WindowBase*>(element.p_window)->create(x, y, width, height, parentWindow);
                 else
-                    std::get<std::unique_ptr<WindowLayoutBase>>(element.p_window)->create(parentWindow, width, height, x, y);
+                    if constexpr (resize)
+                        std::get<std::unique_ptr<WindowLayoutBase>>(element.p_window)->resize(width, height, x, y);
+                    else
+                        std::get<std::unique_ptr<WindowLayoutBase>>(element.p_window)->create(parentWindow, width, height, x, y);
 
-                if (std::holds_alternative<std::monostate>(element.arg))
+                if (element.arg.index() == toInt(LengthType::deduced))
                 {
                     if (!std::holds_alternative<WindowBase*>(element.p_window))
                         throw std::runtime_error("Using tag_deduced with a WindowLayout is not supported");
@@ -198,7 +238,7 @@ class Windows final : public Os
         WindowBase() = default;
 
         virtual void create(int x, int y, int width, int height, HWND parentWindow) = 0;
-        // virtual void resize(int x, int y, int width, int height) = 0;
+        virtual void resize(int x, int y, int width, int height) = 0;
         virtual int getWidth() const = 0;
         virtual int getHeight() const = 0;
     };
@@ -281,6 +321,16 @@ class Windows final : public Os
             window = CreateWindowEx(exStyle, Derived::className, Derived::titleString, style, x, y, width, height, parentWindow, menu, windows.instance, param);
             if (!window)
                 throw WindowsError(LOG_INFO "Failed to create "s + Derived::classDescription + " window"s);
+        }
+        LOG_RETHROW
+    
+        inline void resize(int x, int y, int width, int height) override
+        try
+        {
+            // MoveWindow reference: https://docs.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-movewindow
+
+            if (!MoveWindow(window, x, y, width, height, true))
+                throw WindowsError(LOG_INFO "Failed to move/resize "s + Derived::classDescription + " window"s);
         }
         LOG_RETHROW
 
@@ -432,7 +482,7 @@ class Windows final : public Os
         using Window<Derived>::Window;
 
         inline void create(int x, int y, int width, int height, HWND parentWindow)
-            try
+        try
         {
             Window<Derived>::create(x, y, width, height, parentWindow);
 
@@ -699,6 +749,7 @@ class Windows final : public Os
         std::unique_ptr<PaletteDestAddressInput> p_palettesDestAddressInput;
         std::unique_ptr<TilesDestAddressLabel> p_tilesDestAddressLabel;
         std::unique_ptr<PaletteDestAddressLabel> p_palettesDestAddressLabel;
+        std::unique_ptr<WindowLayoutBase> p_windowLayout;
         HWND activeInput{};
 
         void createChildWindows();
