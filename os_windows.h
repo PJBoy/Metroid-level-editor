@@ -782,6 +782,7 @@ class Windows final : public Os
     std::unique_ptr<LevelView> p_levelView;
     std::unique_ptr<RoomSelectorTree> p_roomSelectorTree;
     std::unique_ptr<SpritemapViewer> p_spritemapViewer;
+    std::unique_ptr<WindowLayoutBase> p_windowLayout;
 
     // Functions //
     void registerClass();

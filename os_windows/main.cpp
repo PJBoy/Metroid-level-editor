@@ -478,6 +478,22 @@ try
 
         break;
     }
+
+    // WM_SIZE reference: https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-size
+    case WM_SIZE:
+    {
+        if (!p_windows->p_windowLayout)
+            return defaultHandler();
+
+        if (wParam != SIZE_RESTORED && wParam != SIZE_MAXIMIZED)
+            return defaultHandler();
+
+        const int width(LOWORD(lParam)), height(HIWORD(lParam));
+        p_windows->p_windowLayout->resize(width, height);
+        p_windows->updateLevelViewScrollbarDimensions();
+        
+        break;
+    }
     }
 
     return 0;
@@ -850,13 +866,13 @@ try
     if (!p_roomSelectorTree)
         p_roomSelectorTree = std::make_unique<RoomSelectorTree>(*this);
 
-    WindowRow windowLayout
+    p_windowLayout = WindowRow::make
     ({
         {2./3, p_levelView.get()},
         {1./3, p_roomSelectorTree.get()}
     });
 
-    windowLayout.create(window, rect.right, rect.bottom);
+    p_windowLayout->create(window, rect.right, rect.bottom);
 }
 LOG_RETHROW
 

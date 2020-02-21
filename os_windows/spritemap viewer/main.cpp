@@ -165,6 +165,8 @@ try
 
         const int width(LOWORD(lParam)), height(HIWORD(lParam));
         p_spritemapViewer->p_windowLayout->resize(width, height);
+
+        break;
     }
 
     // WM_PAINT reference: https://msdn.microsoft.com/en-us/library/dd145213
@@ -229,16 +231,8 @@ void Windows::SpritemapViewer::createChildWindows()
 try
 {
     // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
-    // INITCOMMONCONTROLSEX reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/ns-commctrl-taginitcommoncontrolsex
     // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
-    // InitCommonControlsEx reference: https://docs.microsoft.com/en-gb/windows/desktop/api/commctrl/nf-commctrl-initcommoncontrolsex
     // Edit_SetText reference: https://docs.microsoft.com/en-us/windows/win32/api/windowsx/nf-windowsx-edit_settext
-
-    INITCOMMONCONTROLSEX iccs{};
-    iccs.dwSize = sizeof(iccs);
-    iccs.dwICC = ICC_TREEVIEW_CLASSES;
-    if (!InitCommonControlsEx(&iccs))
-        throw std::runtime_error(LOG_INFO "Could not initialise common controls"s);
 
     RECT rect;
     if (!GetClientRect(window, &rect))
