@@ -489,7 +489,7 @@ try
             return defaultHandler();
 
         const int width(LOWORD(lParam)), height(HIWORD(lParam));
-        p_windows->p_windowLayout->resize(width, height);
+        p_windows->p_windowLayout->resize(0, 0, width, height);
         p_windows->updateLevelViewScrollbarDimensions();
         
         break;
@@ -872,7 +872,7 @@ try
         {1./3, p_roomSelectorTree.get()}
     });
 
-    p_windowLayout->create(window, rect.right, rect.bottom);
+    p_windowLayout->create(0, 0, rect.right, rect.bottom, window);
 }
 LOG_RETHROW
 
@@ -1048,6 +1048,14 @@ LOG_RETHROW
 
 
 // RoomSelectorTree
+void Windows::RoomSelectorTree::create(int x, int y, int width, int height, HWND hwnd)
+try
+{
+    Window::create(x, y, width, height, hwnd);
+    insertRoomList(windows.p_rom->getRoomList());
+}
+LOG_RETHROW
+
 void Windows::RoomSelectorTree::insertRoomList(const std::vector<Rom::RoomList>& roomLists, HTREEITEM parent /*= TVI_ROOT*/)
 try
 {

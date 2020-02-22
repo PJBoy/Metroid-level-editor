@@ -22,10 +22,6 @@
 #include <vector>
 
 
-std::string toString(const std::wstring& from) noexcept;
-std::wstring toWstring(const std::string& from) noexcept;
-
-
 class WindowsError : public std::runtime_error
 {
     // GetLastError reference: https://msdn.microsoft.com/en-gb/library/windows/desktop/ms679360
@@ -88,8 +84,8 @@ class Windows final : public Os
 
         virtual ~WindowLayoutBase() = default;
 
-        virtual void create(HWND parentWindow, int parentWidth, int parentHeight, int x = 0, int y = 0) = 0;
-        virtual void resize(int parentWidth, int parentHeight, int x = 0, int y = 0) = 0;
+        virtual void create(int x, int y, int parentWidth, int parentHeight, HWND parentWindow) = 0;
+        virtual void resize(int x, int y, int parentWidth, int parentHeight) = 0;
     };
 
     // Statically polymorphic window layout base class
@@ -125,100 +121,19 @@ class Windows final : public Os
     public:
         // Static member functions
         template<n_t n>
-        static std::unique_ptr<WindowLayoutBase> make(Element (&&elements)[n], unsigned margin = 0)
-        {
-            return std::make_unique<WindowLayout>(std::move(elements), margin);
-        }
+        static std::unique_ptr<WindowLayoutBase> make(Element (&&elements)[n], unsigned margin = 0);
 
         // Non-static member functions
         WindowLayout() = default;
 
         template<n_t n>
-        explicit WindowLayout(Element (&&elements)[n], unsigned margin = 0)
-        try
-            : elements(std::make_move_iterator(std::begin(elements)), std::make_move_iterator(std::end(elements))), margin(margin)
-        {}
-        LOG_RETHROW
+        explicit WindowLayout(Element (&&elements)[n], unsigned margin = 0);
 
-        void create(HWND parentWindow, int parentWidth, int parentHeight, int x = 0, int y = 0) override
-        try
-        {
-            createOrResize<false>(parentWindow, parentWidth, parentHeight, x, y);
-        }
-        LOG_RETHROW
-
-        void resize(int parentWidth, int parentHeight, int x = 0, int y = 0) override
-        try
-        {
-            createOrResize<true>({}, parentWidth, parentHeight, x, y);
-        }
-        LOG_RETHROW
+        void create(int x, int y, int parentWidth, int parentHeight, HWND parentWindow) override;
+        void resize(int x, int y, int parentWidth, int parentHeight) override;
 
         template<bool resize>
-        void createOrResize(HWND parentWindow, int parentWidth, int parentHeight, int x = 0, int y = 0)
-        try
-        {
-            if constexpr (resize)
-                (void)parentWindow;
-
-            if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
-                parentWidth -= int(margin * (std::size(elements) - 1));
-            else
-                parentHeight -= int(margin * (std::size(elements) - 1));
-
-            for (const Element& element : elements)
-            {
-                int width, height;
-
-                if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
-                {
-                    if (element.arg.index() == toInt(LengthType::fraction))
-                        width = int(parentWidth * std::get<double>(element.arg));
-                    else
-                        width = std::get<int>(element.arg);
-
-                    height = parentHeight;
-                }
-                else
-                {
-                    width = parentWidth;
-                    if (element.arg.index() == toInt(LengthType::fraction))
-                        height = int(parentHeight * std::get<double>(element.arg));
-                    else
-                        height = std::get<int>(element.arg);
-                }
-
-                if (std::holds_alternative<WindowBase*>(element.p_window))
-                    if constexpr (resize)
-                        std::get<WindowBase*>(element.p_window)->resize(x, y, width, height);
-                    else
-                        std::get<WindowBase*>(element.p_window)->create(x, y, width, height, parentWindow);
-                else
-                    if constexpr (resize)
-                        std::get<std::unique_ptr<WindowLayoutBase>>(element.p_window)->resize(width, height, x, y);
-                    else
-                        std::get<std::unique_ptr<WindowLayoutBase>>(element.p_window)->create(parentWindow, width, height, x, y);
-
-                if (element.arg.index() == toInt(LengthType::deduced))
-                {
-                    if (!std::holds_alternative<WindowBase*>(element.p_window))
-                        throw std::runtime_error("Using tag_deduced with a WindowLayout is not supported");
-
-                    if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
-                        x += std::get<WindowBase*>(element.p_window)->getWidth() + margin;
-                    else
-                        y += std::get<WindowBase*>(element.p_window)->getHeight() + margin;
-                }
-                else
-                {
-                    if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
-                        x += width + margin;
-                    else
-                        y += height + margin;
-                }
-            }
-        }
-        LOG_RETHROW
+        void createOrResize(int x, int y, int parentWidth, int parentHeight, HWND parentWindow = {});
     };
 
     using WindowRow = WindowLayout<WindowLayoutBase::Orientation::horizontal>;
@@ -275,112 +190,13 @@ class Windows final : public Os
     public:
         HWND window{};
 
-        Window(Windows& windows)
-        try
-            : windows(windows)
-        {
-            // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
-            // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
-            // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
-            // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
-            // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
-
-            if constexpr (hasWindowProcedure<Derived>)
-            {
-                WNDCLASSEXW wcex{};
-                wcex.cbSize = sizeof(wcex);
-                wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
-                wcex.lpfnWndProc = Derived::windowProcedure;
-                wcex.hInstance = windows.instance;
-                wcex.hbrBackground = CreateSolidBrush(0x000000);
-                if (!wcex.hbrBackground)
-                    throw WindowsError(LOG_INFO "Failed to create background brush");
-
-                wcex.lpszClassName = Derived::className;
-                ATOM registeredClass(RegisterClassEx(&wcex));
-                if (!registeredClass)
-                    throw WindowsError(LOG_INFO "Failed to register "s + Derived::classDescription + " window class"s);
-            }
-        }
-        LOG_RETHROW
-    
-        inline void create(int x, int y, int width, int height, HWND parentWindow) override
-        try
-        {
-            // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
-            // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
-            // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
-
-            if (window)
-                return;
-
-            const unsigned long exStyle(Derived::exStyle);
-            const unsigned long style(Derived::style | WS_VISIBLE);
-            HMENU const menu{};
-            void* const param{};
-            window = CreateWindowEx(exStyle, Derived::className, Derived::titleString, style, x, y, width, height, parentWindow, menu, windows.instance, param);
-            if (!window)
-                throw WindowsError(LOG_INFO "Failed to create "s + Derived::classDescription + " window"s);
-        }
-        LOG_RETHROW
-    
-        inline void resize(int x, int y, int width, int height) override
-        try
-        {
-            // MoveWindow reference: https://docs.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-movewindow
-
-            if (!MoveWindow(window, x, y, width, height, true))
-                throw WindowsError(LOG_INFO "Failed to move/resize "s + Derived::classDescription + " window"s);
-        }
-        LOG_RETHROW
-
-        inline int getWidth() const
-        {
-            // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
-            // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
-
-            RECT rect;
-            if (!GetClientRect(window, &rect))
-                throw WindowsError(LOG_INFO "Failed to get size of client area of "s + Derived::classDescription + " window"s);
-
-            return rect.right;
-        }
-
-        inline int getHeight() const
-        {
-            // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
-            // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
-
-            RECT rect;
-            if (!GetClientRect(window, &rect))
-                throw WindowsError(LOG_INFO "Failed to get size of client area of "s + Derived::classDescription + " window"s);
-
-            return rect.bottom;
-        }
-    
-        inline void destroy()
-        try
-        {
-            // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
-
-            if (!window)
-                return;
-
-            if (!DestroyWindow(window))
-                throw WindowsError(LOG_INFO "Failed to destroy "s + Derived::classDescription + " window"s);
-
-            window = nullptr;
-        }
-        LOG_RETHROW
-
-        inline void invalidate()
-        try
-        {
-            // InvalidateRect reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-invalidaterect
-            if (!InvalidateRect(window, nullptr, true))
-                throw WindowsError(LOG_INFO "Failed to invalidate "s + Derived::classDescription + " window"s);
-        }
-        LOG_RETHROW
+        explicit Window(Windows& windows);
+        void create(int x, int y, int width, int height, HWND parentWindow) override;
+        void resize(int x, int y, int width, int height) override;
+        int getWidth() const;
+        int getHeight() const;
+        void destroy();
+        void invalidate();
     };
 
     // Window subclasses
@@ -401,7 +217,7 @@ class Windows final : public Os
     public:
         using Window<Derived>::Window;
 
-        inline void create(int x, int y, int width, int height, HWND parentWindow)
+        void create(int x, int y, int width, int height, HWND parentWindow)
         try
         {
             Window<Derived>::create(x, y, width, height, parentWindow);
@@ -414,7 +230,7 @@ class Windows final : public Os
         }
         LOG_RETHROW
 
-        inline unsigned long getValue() const
+        unsigned long getValue() const
         try
         {
             // Edit_GetText reference: https://docs.microsoft.com/en-us/windows/win32/api/windowsx/nf-windowsx-edit_gettext
@@ -425,7 +241,7 @@ class Windows final : public Os
         }
         LOG_RETHROW
 
-        inline bool isEmpty() const
+        bool isEmpty() const
         try
         {
             // Edit_GetTextLength reference: https://docs.microsoft.com/en-us/windows/win32/api/windowsx/nf-windowsx-edit_gettextlength
@@ -457,7 +273,7 @@ class Windows final : public Os
     public:
         using Window::Window;
 
-        inline void drawText(std::wstring text)
+        void drawText(std::wstring text)
         {
             // SendMessage reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessage
             // InvalidateRect reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-invalidaterect
@@ -532,13 +348,7 @@ class Windows final : public Os
     public:
         using Window::Window;
     
-        inline void create(int x, int y, int width, int height, HWND hwnd)
-        try
-        {
-            Window::create(x, y, width, height, hwnd);
-            insertRoomList(windows.p_rom->getRoomList());
-        }
-        LOG_RETHROW
+        void create(int x, int y, int width, int height, HWND hwnd);
     };
 
     class SpritemapViewer : public Window<SpritemapViewer>
@@ -806,3 +616,217 @@ public:
     std::filesystem::path getDataDirectory() const override;
     void error(const std::string& errorText) const override;
 };
+
+
+// Window //
+template<typename Derived>
+Windows::Window<Derived>::Window(Windows& windows)
+try
+    : windows(windows)
+{
+    // Window class article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633574
+    // WNDCLASSEXW reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633577
+    // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
+    // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
+    // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
+
+    if constexpr (hasWindowProcedure<Derived>)
+    {
+        WNDCLASSEXW wcex{};
+        wcex.cbSize = sizeof(wcex);
+        wcex.style = CS_HREDRAW | CS_VREDRAW; // Redraw the entire window if a movement or size adjustment changes the width or height of the client area
+        wcex.lpfnWndProc = Derived::windowProcedure;
+        wcex.hInstance = windows.instance;
+        wcex.hbrBackground = CreateSolidBrush(0x000000);
+        if (!wcex.hbrBackground)
+            throw WindowsError(LOG_INFO "Failed to create background brush");
+
+        wcex.lpszClassName = Derived::className;
+        ATOM registeredClass(RegisterClassEx(&wcex));
+        if (!registeredClass)
+            throw WindowsError(LOG_INFO "Failed to register "s + Derived::classDescription + " window class"s);
+    }
+}
+LOG_RETHROW
+    
+template<typename Derived>
+void Windows::Window<Derived>::create(int x, int y, int width, int height, HWND parentWindow)
+try
+{
+    // CreateWindowEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632680
+    // Window style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632600
+    // Window extended style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff700543
+
+    if (window)
+        return;
+
+    const unsigned long exStyle(Derived::exStyle);
+    const unsigned long style(Derived::style | WS_VISIBLE);
+    HMENU const menu{};
+    void* const param{};
+    window = CreateWindowEx(exStyle, Derived::className, Derived::titleString, style, x, y, width, height, parentWindow, menu, windows.instance, param);
+    if (!window)
+        throw WindowsError(LOG_INFO "Failed to create "s + Derived::classDescription + " window"s);
+}
+LOG_RETHROW
+    
+template<typename Derived>
+void Windows::Window<Derived>::resize(int x, int y, int width, int height)
+try
+{
+    // MoveWindow reference: https://docs.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-movewindow
+
+    if (!MoveWindow(window, x, y, width, height, true))
+        throw WindowsError(LOG_INFO "Failed to move/resize "s + Derived::classDescription + " window"s);
+}
+LOG_RETHROW
+
+template<typename Derived>
+int Windows::Window<Derived>::getWidth() const
+{
+    // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
+    // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
+
+    RECT rect;
+    if (!GetClientRect(window, &rect))
+        throw WindowsError(LOG_INFO "Failed to get size of client area of "s + Derived::classDescription + " window"s);
+
+    return rect.right;
+}
+
+template<typename Derived>
+int Windows::Window<Derived>::getHeight() const
+{
+    // RECT reference: https://msdn.microsoft.com/en-us/library/windows/desktop/dd162897
+    // GetClientRec reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633503
+
+    RECT rect;
+    if (!GetClientRect(window, &rect))
+        throw WindowsError(LOG_INFO "Failed to get size of client area of "s + Derived::classDescription + " window"s);
+
+    return rect.bottom;
+}
+    
+template<typename Derived>
+void Windows::Window<Derived>::destroy()
+try
+{
+    // DestroyWindow reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632682
+
+    if (!window)
+        return;
+
+    if (!DestroyWindow(window))
+        throw WindowsError(LOG_INFO "Failed to destroy "s + Derived::classDescription + " window"s);
+
+    window = nullptr;
+}
+LOG_RETHROW
+
+template<typename Derived>
+void Windows::Window<Derived>::invalidate()
+try
+{
+    // InvalidateRect reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-invalidaterect
+    if (!InvalidateRect(window, nullptr, true))
+        throw WindowsError(LOG_INFO "Failed to invalidate "s + Derived::classDescription + " window"s);
+}
+LOG_RETHROW
+
+
+// WindowLayoutBase //
+template<Windows::WindowLayoutBase::Orientation orientation>
+template<n_t n>
+auto Windows::WindowLayout<orientation>::make(Element(&& elements)[n], unsigned margin /*= 0*/) -> std::unique_ptr<WindowLayoutBase>
+{
+    return std::make_unique<WindowLayout>(std::move(elements), margin);
+}
+
+template<Windows::WindowLayoutBase::Orientation orientation>
+template<n_t n>
+Windows::WindowLayout<orientation>::WindowLayout(Element(&& elements)[n], unsigned margin /*= 0*/)
+try
+    : elements(std::make_move_iterator(std::begin(elements)), std::make_move_iterator(std::end(elements))), margin(margin)
+{}
+LOG_RETHROW
+
+template<Windows::WindowLayoutBase::Orientation orientation>
+void Windows::WindowLayout<orientation>::create(int x, int y, int parentWidth, int parentHeight, HWND parentWindow)
+try
+{
+    createOrResize<false>(x, y, parentWidth, parentHeight, parentWindow);
+}
+LOG_RETHROW
+
+template<Windows::WindowLayoutBase::Orientation orientation>
+void Windows::WindowLayout<orientation>::resize(int x, int y, int parentWidth, int parentHeight)
+try
+{
+    createOrResize<true>(x, y, parentWidth, parentHeight);
+}
+LOG_RETHROW
+
+template<Windows::WindowLayoutBase::Orientation orientation>
+template<bool resize>
+void Windows::WindowLayout<orientation>::createOrResize(int x, int y, int parentWidth, int parentHeight, HWND parentWindow /*= {}*/)
+try
+{
+    if constexpr (resize)
+        (void)parentWindow;
+
+    if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
+        parentWidth -= int(margin * (std::size(elements) - 1));
+    else
+        parentHeight -= int(margin * (std::size(elements) - 1));
+
+    for (const Element& element : elements)
+    {
+        int width, height;
+
+        if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
+        {
+            if (element.arg.index() == toInt(LengthType::fraction))
+                width = int(parentWidth * std::get<double>(element.arg));
+            else
+                width = std::get<int>(element.arg);
+
+            height = parentHeight;
+        }
+        else
+        {
+            width = parentWidth;
+            if (element.arg.index() == toInt(LengthType::fraction))
+                height = int(parentHeight * std::get<double>(element.arg));
+            else
+                height = std::get<int>(element.arg);
+        }
+
+        std::visit([=](auto&& p_window)
+        {
+            // p_window is a pointer to WindowBase or WindowLayoutBase
+            if constexpr (resize)
+                p_window->resize(x, y, width, height);
+            else
+                p_window->create(x, y, width, height, parentWindow);
+        }, element.p_window);
+
+        if (element.arg.index() == toInt(LengthType::deduced))
+        {
+            if (!std::holds_alternative<WindowBase*>(element.p_window))
+                throw std::runtime_error("Using tag_deduced with a WindowLayout is not supported");
+
+            if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
+                x += std::get<WindowBase*>(element.p_window)->getWidth() + margin;
+            else
+                y += std::get<WindowBase*>(element.p_window)->getHeight() + margin;
+        }
+        else
+        {
+            if constexpr (orientation == WindowLayoutBase::Orientation::horizontal)
+                x += width + margin;
+            else
+                y += height + margin;
+        }
+    }
+}
+LOG_RETHROW

@@ -1,5 +1,6 @@
 #include "../../os_windows.h"
 
+#include "../../util/string.h"
 #include "../../rom.h"
 
 #include "../../global.h"
@@ -164,7 +165,7 @@ try
             return defaultHandler();
 
         const int width(LOWORD(lParam)), height(HIWORD(lParam));
-        p_spritemapViewer->p_windowLayout->resize(width, height);
+        p_spritemapViewer->p_windowLayout->resize(0, 0, width, height);
 
         break;
     }
@@ -309,7 +310,7 @@ try
         {2./3, p_spritemapView.get()}
     });
 
-    p_windowLayout->create(window, rect.right, rect.bottom);
+    p_windowLayout->create(0, 0, rect.right, rect.bottom, window);
     if (!SetFocus(p_tilesAddressInput->window))
         throw WindowsError(LOG_INFO "Failed to set keyboard focus after creating spritemap window");
 

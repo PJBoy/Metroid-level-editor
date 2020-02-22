@@ -226,6 +226,7 @@
     <ClInclude Include="rom.h" />
     <ClInclude Include="sm.h" />
     <ClInclude Include="util\graphics.h" />
+    <ClInclude Include="util\string.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="config.cpp" />
@@ -242,6 +243,7 @@
     <ClCompile Include="os_windows\spritemap viewer\spritemap view.cpp" />
     <ClCompile Include="rom.cpp" />
     <ClCompile Include="sm.cpp" />
+    <ClCompile Include="util\util.cpp" />
     <ClInclude Include="os.h" />
     <ClInclude Include="os_windows.h" />
   </ItemGroup>

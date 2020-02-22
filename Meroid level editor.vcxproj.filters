@@ -66,6 +66,9 @@
     <ClInclude Include="util\graphics.h">
       <Filter>Header Files\util</Filter>
     </ClInclude>
+    <ClInclude Include="util\string.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -109,6 +112,9 @@
     </ClCompile>
     <ClCompile Include="os_windows\spritemap viewer\spritemap tiles view.cpp">
       <Filter>Source Files\os_windows\spritemap viewer</Filter>
+    </ClCompile>
+    <ClCompile Include="util\util.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
