@@ -80,11 +80,3 @@ catch (const std::exception& e)
     DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
     return DefWindowProc(window, message, wParam, lParam);
 }
-
-Windows::SpritemapViewer::SpritemapTilesView::SpritemapTilesView(Windows& windows)
-try
-    : Window(windows)
-{
-    p_spritemapTilesView = this;
-}
-LOG_RETHROW

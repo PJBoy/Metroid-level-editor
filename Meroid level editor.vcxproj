@@ -135,6 +135,7 @@
       <ConformanceMode>true</ConformanceMode>
       <DisableSpecificWarnings>4305; 4456; 4458; 4554</DisableSpecificWarnings>
       <ObjectFileName>$(IntDir)/%(RelativeDir)/</ObjectFileName>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

@@ -186,6 +186,7 @@ class Windows final : public Os
 
     protected:
         Windows& windows;
+        inline static Derived* p_window;
 
     public:
         HWND window{};
@@ -296,16 +297,6 @@ class Windows final : public Os
 
     public:
         using Window<Derived>::Window;
-
-        inline void create(int x, int y, int width, int height, HWND parentWindow)
-        try
-        {
-            Window<Derived>::create(x, y, width, height, parentWindow);
-
-            // SendMessage reference: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessage
-
-        }
-        LOG_RETHROW
     };
 
     class LevelView : public Window<LevelView>
@@ -368,12 +359,10 @@ class Windows final : public Os
                 style{WS_CHILD | WS_HSCROLL | WS_VSCROLL},
                 exStyle{WS_EX_WINDOWEDGE};
 
-            inline static SpritemapView* p_spritemapView;
-
             static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
 
         public:
-            SpritemapView(Windows& windows);
+            using Window::Window;
         };
 
         class SpritemapTilesView : public Window<SpritemapTilesView>
@@ -389,12 +378,10 @@ class Windows final : public Os
                 style{WS_CHILD | WS_BORDER},
                 exStyle{WS_EX_WINDOWEDGE};
 
-            inline static SpritemapTilesView* p_spritemapTilesView;
-
             static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
 
         public:
-            SpritemapTilesView(Windows& windows);
+            using Window::Window;
         };
 
 
@@ -404,10 +391,9 @@ class Windows final : public Os
 
             const inline static wchar_t* const titleString = L"Tiles";
             const inline static std::string classDescription{"tile address label"};
-            inline static TilesAddressLabel* p_tilesAddressLabel;
 
         public:
-            TilesAddressLabel(Windows& windows);
+            using LabelWindow::LabelWindow;
         };
 
         class PaletteAddressLabel : public LabelWindow<PaletteAddressLabel>
@@ -416,10 +402,9 @@ class Windows final : public Os
 
             const inline static wchar_t* const titleString = L"Palettes";
             const inline static std::string classDescription{"palette address label"};
-            inline static PaletteAddressLabel* p_paletteAddressLabel;
 
         public:
-            PaletteAddressLabel(Windows& windows);
+            using LabelWindow::LabelWindow;
         };
 
         class SpritemapAddressLabel : public LabelWindow<SpritemapAddressLabel>
@@ -428,10 +413,9 @@ class Windows final : public Os
 
             const inline static wchar_t* const titleString = L"Spritemap";
             const inline static std::string classDescription{"spritemap address label"};
-            inline static SpritemapAddressLabel* p_spritemapAddressLabel;
 
         public:
-            SpritemapAddressLabel(Windows& windows);
+            using LabelWindow::LabelWindow;
         };
 
 
@@ -441,10 +425,9 @@ class Windows final : public Os
             friend AddressEditWindow;
 
             const inline static std::string classDescription{"tile address input"};
-            inline static TilesAddressInput* p_tilesAddressInput;
 
         public:
-            TilesAddressInput(Windows& windows);
+            using AddressEditWindow::AddressEditWindow;
         };
 
         class PaletteAddressInput : public AddressEditWindow<PaletteAddressInput, 6>
@@ -453,10 +436,9 @@ class Windows final : public Os
             friend AddressEditWindow;
 
             const inline static std::string classDescription{"palette address input"};
-            inline static PaletteAddressInput* p_paletteAddressInput;
 
         public:
-            PaletteAddressInput(Windows& windows);
+            using AddressEditWindow::AddressEditWindow;
         };
 
         class SpritemapAddressInput : public AddressEditWindow<SpritemapAddressInput, 6>
@@ -465,10 +447,9 @@ class Windows final : public Os
             friend AddressEditWindow;
 
             const inline static std::string classDescription{"spritemap address input"};
-            inline static SpritemapAddressInput* p_spritemapAddressInput;
 
         public:
-            SpritemapAddressInput(Windows& windows);
+            using AddressEditWindow::AddressEditWindow;
         };
 
         
@@ -478,10 +459,9 @@ class Windows final : public Os
 
             const inline static wchar_t* const titleString = L" -> ";
             const inline static std::string classDescription{"tile dest address label"};
-            inline static TilesDestAddressLabel* p_tilesDestAddressLabel;
 
         public:
-            TilesDestAddressLabel(Windows& windows);
+            using LabelWindow::LabelWindow;
         };
 
         class PaletteDestAddressLabel : public LabelWindow<PaletteDestAddressLabel>
@@ -490,10 +470,9 @@ class Windows final : public Os
 
             const inline static wchar_t* const titleString = L" -> ";
             const inline static std::string classDescription{"palette dest address label"};
-            inline static PaletteDestAddressLabel* p_paletteDestAddressLabel;
 
         public:
-            PaletteDestAddressLabel(Windows& windows);
+            using LabelWindow::LabelWindow;
         };
 
         
@@ -503,10 +482,9 @@ class Windows final : public Os
             friend AddressEditWindow;
 
             const inline static std::string classDescription{"tile dest address input"};
-            inline static TilesDestAddressInput* p_tilesDestAddressInput;
 
         public:
-            TilesDestAddressInput(Windows& windows);
+            using AddressEditWindow::AddressEditWindow;
         };
 
         class PaletteDestAddressInput : public AddressEditWindow<PaletteDestAddressInput, 4>
@@ -515,10 +493,9 @@ class Windows final : public Os
             friend AddressEditWindow;
 
             const inline static std::string classDescription{"palette dest address input"};
-            inline static PaletteDestAddressInput* p_paletteDestAddressInput;
 
         public:
-            PaletteDestAddressInput(Windows& windows);
+            using AddressEditWindow::AddressEditWindow;
         };
 
 
@@ -530,21 +507,6 @@ class Windows final : public Os
         const inline static unsigned long
             style{WS_TILEDWINDOW},
             exStyle{WS_EX_WINDOWEDGE};
-
-        const inline static float
-            y_ratio_spritemapView{1},
-            x_ratio_spritemapView{2./3};
-
-        const inline static unsigned
-            y_length_spritemapTiles{0x200},
-            x_length_spritemapTiles{0x100},
-            y_length_addressLabel{19},
-            x_length_addressLabel{96},
-            x_length_destAddressLabel{16},
-            y_length_addressInput{16},
-            x_length_addressInput{96};
-
-        inline static SpritemapViewer* p_spritemapViewer;
 
         std::unique_ptr<StatusBarWindow> p_statusBar;
         std::unique_ptr<SpritemapView> p_spritemapView;
@@ -567,7 +529,7 @@ class Windows final : public Os
         static LRESULT CALLBACK windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept;
 
     public:
-        SpritemapViewer(Windows& windows);
+        using Window::Window;
 
         void create();
     };
@@ -576,10 +538,6 @@ class Windows final : public Os
     const inline static wchar_t
         *const titleString = L"Metroid editor",
         *const className = L"MetroidLevelEditor";
-
-    const inline static float
-        y_ratio_levelEditor{1},
-        y_ratio_roomSelectorTree{1};
 
     // Variables //
     inline static Windows* p_windows; // Provides access to this global state from callback functions
@@ -600,7 +558,7 @@ class Windows final : public Os
     void error(const std::wstring& errorText) const;
     void createChildWindows();
     void destroyChildWindows();
-    void handleCommand(unsigned int id, bool isAccelerator);
+    void handleCommand(unsigned id, bool isAccelerator);
     void openRom(std::filesystem::path filepath);
     void updateLevelViewScrollbarDimensions();
 
@@ -629,6 +587,8 @@ try
     // CreateSolidBrush reference: https://msdn.microsoft.com/en-us/library/dd183518
     // RegisterClassEx reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms633587
     // Window class style constants: https://msdn.microsoft.com/en-us/library/windows/desktop/ff729176
+
+    p_window = static_cast<Derived*>(this);
 
     if constexpr (hasWindowProcedure<Derived>)
     {

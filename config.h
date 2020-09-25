@@ -3,7 +3,6 @@
 #include "global.h"
 
 #include <filesystem>
-#include <iosfwd>
 #include <vector>
 
 class Config

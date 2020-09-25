@@ -28,42 +28,41 @@ try
     case WM_PAINT:
     {
         // GetUpdateRect reference: https://msdn.microsoft.com/en-us/library/dd144943
+        // BeginPaint reference: https://msdn.microsoft.com/en-us/library/dd183362
+        // EndPaint reference: https://msdn.microsoft.com/en-us/library/dd162598
+        // SCROLLINFO reference: https://docs.microsoft.com/en-gb/windows/desktop/api/winuser/ns-winuser-tagscrollinfo
+        // GetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getscrollinfo
 
         RECT updateRect;
         BOOL notEmpty(GetUpdateRect(window, &updateRect, false));
-        if (notEmpty)
+        if (!notEmpty)
+            break;
+        
+        PAINTSTRUCT ps;
+        const auto endPaint([&](HDC)
         {
-            // BeginPaint reference: https://msdn.microsoft.com/en-us/library/dd183362
-            // EndPaint reference: https://msdn.microsoft.com/en-us/library/dd162598
-            // SCROLLINFO reference: https://docs.microsoft.com/en-gb/windows/desktop/api/winuser/ns-winuser-tagscrollinfo
-            // GetScrollInfo reference: https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getscrollinfo
+            EndPaint(window, &ps);
+        });
+        const std::unique_ptr p_displayContext(makeUniquePtr(BeginPaint(window, &ps), endPaint));
+        if (!p_displayContext)
+            throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint"s);
 
-            PAINTSTRUCT ps;
-            const auto endPaint([&](HDC)
-            {
-                EndPaint(window, &ps);
-            });
-            const std::unique_ptr p_displayContext(makeUniquePtr(BeginPaint(window, &ps), endPaint));
-            if (!p_displayContext)
-                throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint"s);
+        // Get scroll position and pass it
+        SCROLLINFO si;
+        si.cbSize = sizeof(si);
+        si.fMask = SIF_POS;
 
-            // Get scroll position and pass it
-            SCROLLINFO si;
-            si.cbSize = sizeof(si);
-            si.fMask = SIF_POS;
+        if (!GetScrollInfo(p_levelView->window, SB_VERT, &si))
+            throw WindowsError(LOG_INFO "Could not get vertical scroll info"s);
 
-            if (!GetScrollInfo(p_levelView->window, SB_VERT, &si))
-                throw WindowsError(LOG_INFO "Could not get vertical scroll info"s);
+        const unsigned y(si.nPos);
 
-            unsigned y(si.nPos);
+        if (!GetScrollInfo(p_levelView->window, SB_HORZ, &si))
+            throw WindowsError(LOG_INFO "Could not get horizontal scroll info"s);
 
-            if (!GetScrollInfo(p_levelView->window, SB_HORZ, &si))
-                throw WindowsError(LOG_INFO "Could not get horizontal scroll info"s);
+        const unsigned x(si.nPos);
 
-            unsigned x(si.nPos);
-
-            p_windows->p_rom->drawLevelView(Cairo::Win32Surface::create(p_displayContext.get()), x, y);
-        }
+        p_windows->p_rom->drawLevelView(Cairo::Win32Surface::create(p_displayContext.get()), x, y);
 
         break;
     }
@@ -123,7 +122,7 @@ try
         }
 
         SetScrollInfo(p_levelView->window, barType, &si, true);
-        if (!InvalidateRect(p_windows->p_levelView->window, nullptr, true))
+        if (!InvalidateRect(p_levelView->window, nullptr, true))
             throw WindowsError(LOG_INFO "Failed to invalidate level view window"s);
 
         break;

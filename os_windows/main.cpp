@@ -697,7 +697,7 @@ try
         throw WindowsError(LOG_INFO "Failed to load acclerators");
 
     // Load monospace font
-    monospace = CreateFont(0, 0, 0, 0, FW_DONTCARE, false, false, false, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
+    monospace = CreateFont(16, 0, 0, 0, FW_DONTCARE, false, false, false, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
     if (!monospace )
         throw WindowsError(LOG_INFO "Could not load monospace font"s);
 }
@@ -887,7 +887,7 @@ try
 }
 LOG_RETHROW
 
-void Windows::handleCommand(unsigned int id, bool isAccelerator)
+void Windows::handleCommand(unsigned id, bool isAccelerator)
 try
 {
     switch (id)
@@ -940,7 +940,7 @@ try
         case Menu::menu.spritemapViewer.menuId:
         {
             if (!p_spritemapViewer)
-                p_spritemapViewer = std::make_unique<SpritemapViewer>(*this);
+                p_spritemapViewer = std::make_unique<SpritemapViewer>(*this); // Constructor registers the class if it has a window procedure
             else
                 p_spritemapViewer->destroy();
 
@@ -1079,5 +1079,3 @@ try
     }
 }
 LOG_RETHROW
-
-

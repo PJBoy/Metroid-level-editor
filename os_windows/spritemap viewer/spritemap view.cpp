@@ -92,7 +92,7 @@ try
         SCROLLINFO si;
         si.cbSize = sizeof(si);
         si.fMask = SIF_POS | SIF_PAGE | SIF_RANGE;
-        if (!GetScrollInfo(p_spritemapViewer->window, barType, &si))
+        if (!GetScrollInfo(p_window->window, barType, &si))
             throw WindowsError(LOG_INFO "Could not get " + (barType == SB_HORZ ? "horizontal"s : "vertical"s) + " scroll info"s);
 
         switch (request)
@@ -126,7 +126,7 @@ try
             break;
         }
 
-        SetScrollInfo(p_spritemapViewer->window, barType, &si, true);
+        SetScrollInfo(p_window->window, barType, &si, true);
         if (!InvalidateRect(p_windows->p_spritemapViewer->window, nullptr, true))
             throw WindowsError(LOG_INFO "Failed to invalidate spritemap viewer window"s);
 
@@ -141,11 +141,3 @@ catch (const std::exception& e)
     DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
     return DefWindowProc(window, message, wParam, lParam);
 }
-
-Windows::SpritemapViewer::SpritemapView::SpritemapView(Windows& windows)
-try
-    : Window(windows)
-{
-    p_spritemapView = this;
-}
-LOG_RETHROW
