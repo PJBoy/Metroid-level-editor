@@ -1,13 +1,10 @@
 #include "../../os_windows.h"
 
-#include "../../rom.h"
-
 #include "../../global.h"
 
-#include <cairomm/win32_surface.h>
+//#include <cairomm/win32_surface.h>
 
-#include <memory>
-
+import rom;
 
 LRESULT CALLBACK Windows::SpritemapViewer::SpritemapTilesView::windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
 try
@@ -66,7 +63,7 @@ try
             const unsigned x{}, y{};
         //*/
 
-            p_windows->p_rom->drawSpritemapTilesView(Cairo::Win32Surface::create(p_displayContext.get()), x, y);
+            //p_windows->p_rom->drawSpritemapTilesView(Cairo::Win32Surface::create(p_displayContext.get()), x, y);
         }
 
         break;

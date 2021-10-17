@@ -1,11 +1,11 @@
-#pragma once
+module;
 
 #include "global.h"
 
-#include <cstring>
+export module byte_cast_iterator;
 
 // Iterator that takes a byte array and interprets it as an array of integers (to be changed to std::bit_cast)
-template<typename Int>
+export template<typename Int>
 class ByteCastIterator
 {
     static_assert(std::is_integral_v<Int>);
@@ -24,6 +24,9 @@ public:
     // InputIterator requires this is convertible to value_type
     // ForwardIterator requires that this is precisely value_type& or const value_type&
     using reference = value_type&;
+
+    using const_pointer = const value_type*;
+    using const_reference = const value_type&;
 
     // ForwardIterator requires a default constructor
     ByteCastIterator() = default;
@@ -45,18 +48,18 @@ public:
         return v;
     }
 
-    const reference operator*() const noexcept
+    const_reference operator*() const noexcept
     {
         return v;
     }
 
     // InputIterator requires this exists and it->m is equivalent to (*it).m
-    value_type* operator->() noexcept
+    pointer operator->() noexcept
     {
         return &**this;
     }
 
-    const value_type* operator->() const noexcept
+    const_pointer operator->() const noexcept
     {
         return &**this;
     }

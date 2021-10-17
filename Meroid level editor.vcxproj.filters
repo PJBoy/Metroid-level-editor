@@ -22,52 +22,25 @@
     <Filter Include="Source Files\os_windows\spritemap viewer">
       <UniqueIdentifier>{c3bb8832-2ebc-4100-8d42-06ac6848c958}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\global">
+      <UniqueIdentifier>{59770717-cfda-46f3-a7c2-f86c6d614f7b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="os.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="os_windows.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="global.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="debug.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="rom.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gba.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="sm.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="mf.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="mzm.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="matrix.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="byte_cast_iterator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="util\graphics.h">
       <Filter>Header Files\util</Filter>
     </ClInclude>
-    <ClInclude Include="util\string.h">
-      <Filter>Header Files\util</Filter>
+    <ClInclude Include="debug.h">
+      <Filter>Header Files\global</Filter>
+    </ClInclude>
+    <ClInclude Include="global.h">
+      <Filter>Header Files\global</Filter>
+    </ClInclude>
+    <ClInclude Include="os_windows.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -115,6 +88,48 @@
     </ClCompile>
     <ClCompile Include="util\util.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="debug_m.ixx">
+      <Filter>Header Files\global</Filter>
+    </ClCompile>
+    <ClCompile Include="typedefs.ixx">
+      <Filter>Header Files\global</Filter>
+    </ClCompile>
+    <ClCompile Include="config_m.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="global_m.ixx">
+      <Filter>Header Files\global</Filter>
+    </ClCompile>
+    <ClCompile Include="rom_m.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="byte_cast_iterator_m.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="matrix_m.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="os_m.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="os_windows_m.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="util\string_m.ixx">
+      <Filter>Header Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="gba_m.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mf_m.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mzm_m.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sm_m.ixx">
+      <Filter>Header Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

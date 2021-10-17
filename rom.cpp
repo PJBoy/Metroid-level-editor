@@ -1,10 +1,12 @@
-#include "rom.h"
-
-#include "mf.h"
-#include "mzm.h"
-#include "sm.h"
+//#include "sm.h"
 
 #include "global.h"
+
+import rom;
+
+import mf;
+import mzm;
+import Sm;
 
 Rom::Reader::Reader(std::filesystem::path filepath, index_t address /* = 0*/)
 try
@@ -79,6 +81,7 @@ try
 }
 LOG_RETHROW
 
+/*
 void Rom::drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned, unsigned) const
 try
 {
@@ -129,6 +132,7 @@ try
     p_context->paint();
 }
 LOG_RETHROW
+*/
 
 auto Rom::getRoomList() const -> std::vector<RoomList>
 {

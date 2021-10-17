@@ -1,12 +1,9 @@
 #include "../../os_windows.h"
 
-#include "../../util/string.h"
-#include "../../rom.h"
-
 #include "../../global.h"
 
-#include <memory>
-
+import rom;
+import string;
 
 LRESULT CALLBACK Windows::SpritemapViewer::windowProcedure(HWND window, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
 try

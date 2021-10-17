@@ -1,6 +1,6 @@
-#include "gba.h"
-
 #include "global.h"
+
+import gba;
 
 Gba::Gba(std::filesystem::path filepath)
 try

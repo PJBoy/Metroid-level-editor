@@ -1,20 +1,11 @@
-#include "config.h"
-
 #include "global.h"
 
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <optional>
-#include <regex>
-#include <stdexcept>
-#include <sstream>
+import config;
 
-void Config::init(const std::filesystem::path& dataDirectory)
+Config::Config(const std::filesystem::path& dataDirectory)
 try
-{
-    filepath = dataDirectory / filename;
-}
+    : filepath(dataDirectory / filename)
+{}
 LOG_RETHROW
 
 void Config::save() const

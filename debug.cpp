@@ -1,14 +1,8 @@
+#include <ctime> // std.core doesn't provide std::time I guess???
+
 #include "debug.h"
 
-#include "global.h"
-
-#include <chrono>
-#include <ctime>
-#include <iomanip>
-#include <iostream>
-#include <iterator>
-#include <unordered_set>
-#include <utility>
+import typedefs_m;
 
 std::filesystem::path DebugFile::dataDirectory;
 
@@ -21,23 +15,25 @@ struct FilepathHash
 };
 
 DebugFile::DebugFile(std::filesystem::path filename) noexcept
-try
 {
-    const std::filesystem::path filepath(dataDirectory / filename);
+    try
+    {
+        const std::filesystem::path filepath(dataDirectory / filename);
 
-    // If first use of file, clear it, otherwise insert spaces
-    static std::unordered_set<std::filesystem::path, FilepathHash> initialised;
-    if (initialised.insert(filepath).second)
-        this->open(filepath, trunc);
-    else
-        this->open(filepath, app | ate);
+        // If first use of file, clear it, otherwise insert spaces
+        static std::unordered_set<std::filesystem::path, FilepathHash> initialised;
+        if (initialised.insert(filepath).second)
+            this->open(filepath, trunc);
+        else
+            this->open(filepath, app | ate);
 
-    const std::time_t time(std::time(nullptr));
-    *this << std::put_time(std::gmtime(&time), "%c") << " - "s;
-}
-catch (const std::exception&)
-{
-    // There's nothing I can do to handle this exception; but catch it anyways, because this is a non-fatal error
+        const std::time_t time(std::time(nullptr));
+        //*this << std::put_time(std::gmtime(&time), "%c") << " - "s; // commented out whilst MSVC complains about gmtime...
+    }
+    catch (const std::exception&)
+    {
+        // There's nothing I can do to handle this exception; but catch it anyways, because this is a non-fatal error
+    }
 }
 
 void DebugFile::init(std::filesystem::path dataDirectory_in) noexcept

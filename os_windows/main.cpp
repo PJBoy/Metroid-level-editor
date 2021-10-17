@@ -6,38 +6,22 @@
 // Window article: https://msdn.microsoft.com/en-us/library/windows/desktop/ms632598
 // Controls reference: https://docs.microsoft.com/en-us/windows/desktop/controls/window-controls
 // Control class names: https://docs.microsoft.com/en-us/windows/win32/controls/common-control-window-classes
-    
+
+#include <cstdio> // for std{in,out,err}
+#include <cstdlib> // for EXIT_SUCCESS
+
 #include "../os_windows.h"
 
 #include "../resource.h"
-#include "../rom.h"
 
 #include "../global.h"
 
-#include <cairomm/win32_surface.h>
+//#include <cairomm/win32_surface.h>
 
 #include <commdlg.h>
 
-#include <codecvt>
-#include <ios>
-#include <locale>
-#include <memory>
-#include <stdexcept>
-
-
-std::string toString(const std::wstring& from) noexcept
-{
-    // TODO: wstring_convert et al are deprecated as of C++17
-    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-    return converter.to_bytes(from);
-}
-
-std::wstring toWstring(const std::string& from) noexcept
-{
-    // TODO: wstring_convert et al are deprecated as of C++17
-    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-    return converter.from_bytes(from);
-}
+import rom;
+import string;
 
 
 namespace Menu
@@ -279,7 +263,7 @@ try
         // PostQuitMessage reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644945
         try
         {
-            //p_windows->config.save();
+            //p_windows->p_config->save();
         }
         catch (const std::exception& e)
         {
@@ -339,7 +323,7 @@ try
             MENUITEMINFO menuItemInfo{};
             menuItemInfo.cbSize = sizeof(menuItemInfo);
             menuItemInfo.fMask = MIIM_TYPE;
-            for (std::wstring filepath : Windows::p_windows->config.recentFiles)
+            for (std::wstring filepath : Windows::p_windows->p_config->recentFiles)
             {
                 menuItemInfo.dwTypeData = std::data(filepath);
                 if (!InsertMenuItem(menu, 0, MF_BYPOSITION, &menuItemInfo))
@@ -650,8 +634,8 @@ long CALLBACK vectoredHandler(EXCEPTION_POINTERS* p_e) noexcept
 
 
 // Member functions
-Windows::Windows(HINSTANCE instance, int cmdShow, Config& config) noexcept
-    : instance(instance), cmdShow(cmdShow), config(config)
+Windows::Windows(HINSTANCE instance, int cmdShow) noexcept
+    : instance(instance), cmdShow(cmdShow)
 {
     // No logging allowed here
 
@@ -663,12 +647,15 @@ Windows::Windows(HINSTANCE instance, int cmdShow, Config& config) noexcept
     SetErrorMode(SEM_NOGPFAULTERRORBOX);
 }
 
-void Windows::init()
+void Windows::init(Config& config)
 try
 {
     // AddVectoredExceptionHandler reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms679274
+    // AllocConsole reference: https://docs.microsoft.com/en-us/windows/console/allocconsole
     // LoadAccelerators reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms646370
     // CreateFont reference: https://docs.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-createfonta
+
+    Os::init(config);
 
     // Set Windows exception handler
     if (!AddVectoredExceptionHandler(~0ul, vectoredHandler))
@@ -1001,8 +988,8 @@ try
 
     try
     {
-        config.addRecentFile(filepath);
-        config.save();
+        p_config->addRecentFile(filepath);
+        p_config->save();
     }
     catch (const std::exception& e)
     {

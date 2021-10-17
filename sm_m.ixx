@@ -1,15 +1,14 @@
-#pragma once
-
-#include "byte_cast_iterator.h"
-#include "matrix.h"
-#include "rom.h"
+module;
 
 #include "global.h"
 
-#include <array>
-#include <cinttypes>
+export module Sm;
 
-class Sm : public Rom
+import byte_cast_iterator;
+import matrix;
+import rom;
+
+export class Sm : public Rom
 {
 public:
     using byte_t = std::uint8_t;
@@ -25,49 +24,85 @@ private:
     public:
     // Operator overloads
     #if 1
-    #define operators(op) \
-        constexpr Pointer operator##op(Pointer rhs) \
-        { \
-            return Pointer(v op long_t(rhs.v), true); \
-        } \
-    \
-        template<typename U> \
-        constexpr friend Pointer operator##op(Pointer lhs, U rhs) \
-        { \
-            return Pointer(lhs.v op long_t(rhs), true); \
-        } \
-    \
-        template<typename U> \
-        constexpr friend Pointer operator##op(U lhs, Pointer rhs) \
-        { \
-            return Pointer(long_t(lhs) op rhs.v, true); \
-        } \
-    \
-        template<typename U> \
-        constexpr Pointer& operator##op##=(U rhs) \
-        { \
-            return v op##= rhs, *this; \
-        } \
+        friend constexpr auto operator<=>(Pointer, Pointer) noexcept = default;
+        
+        // MSVC can't find this operator+ since using modules...
+        template<typename U>
+        constexpr friend Pointer operator+(Pointer lhs, U rhs)
+        {
+            return Pointer(lhs.v + long_t(rhs), true);
+        }
+        
+        // So we have to provide this instead
+        template<typename U>
+        constexpr Pointer operator+(U rhs) const
+        {
+            return Pointer(v + long_t(rhs), true);
+        }
 
-        operators(+)
-        operators(-)
-        operators(|)
-        operators(&)
-    #undef operators
+        template<typename U>
+        constexpr friend Pointer operator+(U lhs, Pointer rhs)
+        {
+            return Pointer(long_t(lhs) + rhs.v, true);
+        }
 
-    #define operator(op) \
-        constexpr bool operator##op(Pointer rhs) \
-        { \
-            return v op rhs.v; \
-        } \
+        template<typename U>
+        constexpr Pointer& operator+=(U rhs)
+        {
+            return v += rhs, *this;
+        }
 
-        operator(<)
-        operator(>)
-        operator(<=)
-        operator(>=)
-        operator(==)
-        operator(!=)
-    #undef operator
+        constexpr Pointer operator-(Pointer rhs)
+        {
+            return Pointer(v - long_t(rhs.v), true);
+        }
+
+        template<typename U>
+        constexpr friend Pointer operator-(Pointer lhs, U rhs)
+        {
+            return Pointer(lhs.v - long_t(rhs), true);
+        }
+
+        template<typename U>
+        constexpr friend Pointer operator-(U lhs, Pointer rhs)
+        {
+            return Pointer(long_t(lhs) - rhs.v, true);
+        }
+
+        template<typename U>
+        constexpr Pointer& operator-=(U rhs)
+        {
+            return v -= rhs, *this;
+        }
+
+        constexpr Pointer operator|(Pointer rhs)
+        {
+            return Pointer(v | long_t(rhs.v), true);
+        }
+        
+        template<typename U>
+        constexpr Pointer operator|(U rhs)
+        {
+            return Pointer(v | long_t(rhs), true);
+        }
+
+        template<typename U>
+        constexpr friend Pointer operator|(Pointer lhs, U rhs)
+        {
+            return Pointer(lhs.v | long_t(rhs), true);
+        }
+
+        template<typename U>
+        constexpr friend Pointer operator|(U lhs, Pointer rhs)
+        {
+            return Pointer(long_t(lhs) | rhs.v, true);
+        }
+
+        template<typename U>
+        constexpr Pointer& operator|=(U rhs)
+        {
+            return v |= rhs, *this;
+        }
 
         constexpr Pointer& operator++()
         {
@@ -79,6 +114,8 @@ private:
             return --v, *this;
         }
 
+        // These are causing internal compiler errors in modules...
+        /*
         constexpr Pointer operator++(int)
         {
             return ++*this - 1;
@@ -88,6 +125,7 @@ private:
         {
             return --*this + 1;
         }
+        //*/
     #endif
 
         Pointer() = default;
@@ -503,18 +541,18 @@ private:
     metatile_t metatiles[0x100 + 0x300]; // CRE is 100h metatiles
     tile_t tiles[0x280 + 0x180]; // CRE is 180h tiles
     palette_t bgPalettes[8];
-    Cairo::RefPtr<Cairo::ImageSurface> metatileSurfaces[0x400];
-    Cairo::RefPtr<Cairo::ImageSurface> p_layer1, p_layer2;
-    Cairo::RefPtr<Cairo::ImageSurface> p_level;
-    Cairo::RefPtr<Cairo::ImageSurface> p_spritemapSurface, p_spritemapTilesSurface;
+    //Cairo::RefPtr<Cairo::ImageSurface> metatileSurfaces[0x400];
+    //Cairo::RefPtr<Cairo::ImageSurface> p_layer1, p_layer2;
+    //Cairo::RefPtr<Cairo::ImageSurface> p_level;
+    //Cairo::RefPtr<Cairo::ImageSurface> p_spritemapSurface, p_spritemapTilesSurface;
     std::vector<std::pair<Pointer, RoomHeader>> knownRoomHeaders;
     LevelData levelData;
 
     void decompressTileset(index_t i_tileset);
-    Cairo::RefPtr<Cairo::ImageSurface> createTileSurface(const tile_t& tile, const palette_t& palette, bool flip_x = false, bool flip_y = false) const;
-    Cairo::RefPtr<Cairo::ImageSurface> createMetatileSurface(const metatile_t& metatile) const;
+    //Cairo::RefPtr<Cairo::ImageSurface> createTileSurface(const tile_t& tile, const palette_t& palette, bool flip_x = false, bool flip_y = false) const;
+    //Cairo::RefPtr<Cairo::ImageSurface> createMetatileSurface(const metatile_t& metatile) const;
     void createMetatileSurfaces();
-    Cairo::RefPtr<Cairo::ImageSurface> createLayerSurface(const Matrix<word_t>& layer) const;
+    //Cairo::RefPtr<Cairo::ImageSurface> createLayerSurface(const Matrix<word_t>& layer) const;
     void loadTileset(index_t i_tileset);
 
     void createSpritemapSurface(Pointer p_tiles, Pointer p_palette, Pointer p_spritemapData, index_t tilesDestAddress, index_t palettesDestAddress);
@@ -525,16 +563,16 @@ private:
 public:
     explicit Sm(std::filesystem::path path);
 
-    virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
-    virtual void drawSpritemapView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
-    virtual void drawSpritemapTilesView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
+    //virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
+    //virtual void drawSpritemapView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
+    //virtual void drawSpritemapTilesView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const override;
     virtual Dimensions getLevelViewDimensions() const override;
     virtual std::vector<RoomList> getRoomList() const override;
     virtual void loadLevelData(std::vector<long> ids) override;
     virtual void loadSpritemap(index_t tilesAddress, index_t palettesAddress, index_t spritemapAddress, index_t tilesDestAddress, index_t palettesDestAddress) override;
 };
 
-constexpr Sm::Pointer operator"" _sm(unsigned long long pointer)
+export constexpr Sm::Pointer operator"" _sm(unsigned long long pointer)
 {
     return Sm::Pointer(Sm::long_t(pointer));
 }

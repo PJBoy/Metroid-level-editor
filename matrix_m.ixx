@@ -1,12 +1,10 @@
-#pragma once
+module;
 
 #include "global.h"
 
-#include <compare>
-#include <iterator>
-#include <vector>
+export module matrix;
 
-template <typename T>
+export template <typename T>
 class Matrix
 {
 public:

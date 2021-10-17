@@ -2,10 +2,11 @@
 
 #include "../global.h"
 
-#include <cairomm/cairomm.h>
+//#include <cairomm/cairomm.h>
 
 namespace Util
 {
+    /*
     inline Cairo::RefPtr<Cairo::ImageSurface> makeImageSurface(int width, int height)
     try
     {
@@ -39,6 +40,7 @@ namespace Util
         return p_target;
     }
     LOG_RETHROW
+    */
 
     inline void bgr15ToRgba32(unsigned char* p_rgba, uint16_t bgr, bool transparent)
     {

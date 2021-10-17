@@ -1,14 +1,11 @@
 #include "../os_windows.h"
 
-#include "../util/string.h"
-
 #include "../global.h"
 
 #include <cderr.h>
 #include <commdlg.h>
 
-#include <stdexcept>
-
+import string;
 
 // WindowError
 std::wstring WindowsError::getErrorMessage(unsigned long errorId)

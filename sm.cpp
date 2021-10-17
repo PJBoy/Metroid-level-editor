@@ -1,12 +1,11 @@
-#include "sm.h"
+//#include "sm.h"
 
 #include "util/graphics.h"
 #include "global.h"
 
-#include <array>
-#include <numeric>
-#include <string_view>
+import Sm;
 
+import byte_cast_iterator;
 
 // Public member functions
 Sm::Sm(std::filesystem::path filepath)
@@ -27,6 +26,7 @@ try
 }
 LOG_RETHROW
 
+/*
 void Sm::drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const
 try
 {
@@ -64,6 +64,7 @@ try
     p_context->paint();
 }
 LOG_RETHROW
+*/
 
 auto Sm::getLevelViewDimensions() const -> Dimensions
 try
@@ -129,6 +130,7 @@ try
 
     // Now to create the Cairo layer1 and possibly layer2 image surfaces
     loadTileset(stateHeader.i_tileset);
+    /*
     p_level = Util::makeImageSurface(int(levelData.n_x * 0x100), int(levelData.n_y * 0x100));
     if (levelData.layer2)
     {
@@ -142,6 +144,7 @@ try
     Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_level));
     p_context->set_source(p_layer1, 0, 0);
     p_context->paint();
+    */
 }
 LOG_RETHROW
 
@@ -354,6 +357,7 @@ LOG_RETHROW
 
 
 // Private member functions
+/*
 Cairo::RefPtr<Cairo::ImageSurface> Sm::createLayerSurface(const Matrix<word_t>& layer) const
 {
     Cairo::RefPtr<Cairo::ImageSurface> p_layer(Util::makeImageSurface(int(layer.size_x() * 0x10), int(layer.size_y() * 0x10)));
@@ -372,6 +376,7 @@ Cairo::RefPtr<Cairo::ImageSurface> Sm::createLayerSurface(const Matrix<word_t>& 
 
     return p_layer;
 }
+*/
 
 void Sm::decompressTileset(index_t i_tileset)
 try
@@ -405,6 +410,7 @@ try
 }
 LOG_RETHROW
 
+#if 0
 Cairo::RefPtr<Cairo::ImageSurface> Sm::createTileSurface(const tile_t& tile, const palette_t& palette, bool flip_x /*= false */, bool flip_y /*= false */) const
 try
 {
@@ -455,12 +461,15 @@ try
     return p_metatileSurface;
 }
 LOG_RETHROW
+#endif
 
 void Sm::createMetatileSurfaces()
 try
 {
+    /*
     for (index_t i{}; i < std::size(metatiles); ++i)
         metatileSurfaces[i] = createMetatileSurface(metatiles[i]);
+    */
 }
 LOG_RETHROW
 
@@ -493,6 +502,7 @@ try
     Spritemap spritemap(r);
 
     const n_t width(256), height(256), margin(128);
+    /*
     p_spritemapSurface = Util::makeImageSurface(width, height);
     {
         Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_spritemapSurface));
@@ -522,6 +532,7 @@ try
                         p_context->paint();
                     }
     }
+    */
 }
 LOG_RETHROW
 
@@ -543,6 +554,7 @@ try
     r.get<char, 1>(p_palette, reinterpret_cast<char*>(palettes) + (palettesDestAddress - 0x80) * 2, (0x100 - palettesDestAddress) * 2);
 
     const n_t width(0x80), height(std::size(tiles) / 0x10 * 8);
+    /*
     p_spritemapTilesSurface = Util::makeImageSurface(width, height);
     {
         Cairo::RefPtr<Cairo::Context> p_context(Cairo::Context::create(p_spritemapTilesSurface));
@@ -555,6 +567,7 @@ try
                 p_context->paint();
             }
     }
+    */
 }
 LOG_RETHROW
 

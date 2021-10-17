@@ -1,13 +1,12 @@
-#pragma once
+module;
 
 #include "global.h"
 
-#include <cairomm/cairomm.h>
+//#include <cairomm/cairomm.h>
 
-#include <filesystem>
-#include <memory>
+export module rom;
 
-class Rom
+export class Rom
 {
 protected:
     class Reader
@@ -165,9 +164,9 @@ public:
 
     virtual ~Rom() = default;
 
-    virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const;
-    virtual void drawSpritemapView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const;
-    virtual void drawSpritemapTilesView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const;
+    //virtual void drawLevelView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const;
+    //virtual void drawSpritemapView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const;
+    //virtual void drawSpritemapTilesView(Cairo::RefPtr<Cairo::Surface> p_surface, unsigned x, unsigned y) const;
     virtual Dimensions getLevelViewDimensions() const;
     virtual std::vector<RoomList> getRoomList() const;
     virtual void loadLevelData(std::vector<long> ids);

@@ -1,13 +1,18 @@
 #pragma once
 
-#include "global.h"
+import debug_m;
 
-#include <exception>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
+import std.core;
+import std.filesystem;
+import std.memory;
+import std.regex;
+import std.threading;
 
+using namespace std::literals;
+
+// `APPLY` and `STRINGIFY` are defined in global.h
 #define LOG_INFO __FILE__ ":" APPLY(STRINGIFY, __LINE__) " - "s
+
 #define LOG_RETHROW \
     catch (const std::exception& e) \
     { \
@@ -17,28 +22,3 @@
 
 #define LOG_IGNORE(e) \
     DebugFile(DebugFile::info) << LOG_INFO "Ignoring exception: " << (e).what() << '\n';
-
-class DebugFile : public std::ofstream
-{
-    // MSVC bug: making this static variable inline causes the following const inline statics to be empty strings
-    static std::filesystem::path dataDirectory;
-
-public:
-    const inline static std::string
-        error{"debug_error.txt"s},
-        warning{"debug_warning.txt"s},
-        info{"debug_info.txt"s};
-
-    DebugFile(std::filesystem::path filename) noexcept;
-
-    template<typename T>
-    DebugFile& operator<<(const T& v)
-    {
-        std::cout << v;
-        *static_cast<std::ofstream*>(this) << v;
-        return *this;
-    }
-
-    static void init(std::filesystem::path dataDirectory_in) noexcept;
-    void writeImage(const uint16_t* data, uint32_t width, uint32_t height);
-};

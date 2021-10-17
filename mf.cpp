@@ -1,6 +1,6 @@
-#include "mf.h"
-
 #include "global.h"
+
+import mf;
 
 Mf::Mf(std::filesystem::path filepath)
 try

@@ -1,6 +1,6 @@
-#include "mzm.h"
-
 #include "global.h"
+
+import mzm;
 
 Mzm::Mzm(std::filesystem::path filepath)
 try

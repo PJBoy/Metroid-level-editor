@@ -1,10 +1,12 @@
-#pragma once
-
-#include "gba.h"
+module;
 
 #include "global.h"
 
-class Mf : public Gba
+export module mf;
+
+import gba;
+
+export class Mf : public Gba
 {
 public:
     explicit Mf(std::filesystem::path filepath);
