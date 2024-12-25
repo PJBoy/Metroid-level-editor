@@ -1,0 +1,3 @@
+When a window is destroyed, it should be erased from windowMap
+Need to determine what the appropriate message is for that
+Lets just log all messages after I implement a child window
