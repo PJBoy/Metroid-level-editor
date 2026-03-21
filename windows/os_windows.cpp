@@ -183,6 +183,75 @@ Windows::Windows(HINSTANCE instance) noexcept
     SetErrorMode(SEM_NOGPFAULTERRORBOX);
 }
 
+static bool isChildWindow(HWND windowHandle)
+{
+    // GetAncestor reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getancestor
+    // GetDesktopWindow reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getdesktopwindow
+    
+    HWND parentHandle(GetAncestor(windowHandle, GA_PARENT));
+    return parentHandle && parentHandle != GetDesktopWindow();
+}
+
+static Menu& findMenu(Menu& menu, HMENU rootMenuHandle, HMENU targetMenuHandle)
+try
+{
+    std::stack<std::pair<Menu*, HMENU>> menus;
+    menus.push({&menu, rootMenuHandle});
+    do
+    {
+        auto [p_menu, menuHandle](std::move(menus.top()));
+        if (menuHandle == targetMenuHandle)
+            return *p_menu;
+
+        menus.pop();
+        const n_t n_entries(std::size(p_menu->entries));
+        for (index_t i_entry{}; i_entry < n_entries; ++i_entry)
+        {
+            MenuEntry& entry(p_menu->entries[i_entry]);
+            if (!entry.isSubmenu())
+                continue;
+
+            HMENU const submenuHandle(GetSubMenu(menuHandle, int(i_entry)));
+            if (!submenuHandle)
+                throw WindowsError(LOG_INFO "GetSubMenu failed");
+
+            menus.push({&entry.asSubmenu(), submenuHandle});
+        }
+    } while (!menus.empty());
+
+    throw std::runtime_error(LOG_INFO "Could not find menu corresponding to menu command");
+}
+LOG_RETHROW
+
+static void handleMenuCommand(HWND windowHandle, HMENU targetMenuHandle, index_t i_targetMenuEntry)
+try
+{
+    // GetMenu reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmenu
+    // GetSubMenu reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getsubmenu
+
+    if (isChildWindow(windowHandle))
+        throw WindowsError(LOG_INFO "Menu command received for child window");
+
+    Window& window(*windowMap[windowHandle]);
+    if (!window.menu)
+        throw WindowsError(LOG_INFO "Menu command received for window that has no menu");
+
+    HMENU const menuHandle(GetMenu(windowHandle));
+    if (!menuHandle)
+        throw WindowsError(LOG_INFO "GetMenu failed");
+
+    Menu& menu(findMenu(*window.menu, menuHandle, targetMenuHandle));
+    if (i_targetMenuEntry >= std::size(menu.entries))
+        throw std::runtime_error(LOG_INFO "Menu command received with invalid index " + std::to_string(i_targetMenuEntry));
+
+    MenuEntry& menuEntry(menu.entries[i_targetMenuEntry]);
+    if (menuEntry.isSubmenu())
+        throw std::runtime_error(LOG_INFO "Menu command received for submenu");
+
+    menuEntry.asItem().action(window);
+}
+LOG_RETHROW
+
 static LRESULT CALLBACK windowProcedure(HWND windowHandle, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
 try
 {
@@ -198,6 +267,14 @@ try
     default:
         return defaultHandler();
 
+    // WM_DESTROY reference: https://learn.microsoft.com/en-gb/windows/win32/winmsg/wm-destroy
+    case WM_DESTROY:
+    {
+        windowMap[windowHandle]->onDestroy();
+        
+        break;
+    }
+
     // WM_COMMAND reference: https://learn.microsoft.com/en-gb/windows/win32/menurc/wm-command
     case WM_COMMAND:
     {
@@ -209,17 +286,17 @@ try
         
         const bool isAccelerator(HIWORD(wParam) != 0);
         if (!isAccelerator)
-            throw WindowsError(LOG_INFO "Received menu command in WM_COMMAND message");
+            throw std::runtime_error(LOG_INFO "Received menu command in WM_COMMAND message");
 
         break;
     }
 
-    // WM_DESTROY reference: https://learn.microsoft.com/en-gb/windows/win32/winmsg/wm-destroy
-    case WM_DESTROY:
+    // WM_MENUCOMMAND reference: https://learn.microsoft.com/en-us/windows/win32/menurc/wm-menucommand
+    case WM_MENUCOMMAND:
     {
-        windowMap[windowHandle]->onDestroy();
-        
-        break;
+        const index_t i_menuItem(wParam);
+        const auto menuHandle(reinterpret_cast<HMENU>(lParam));
+        handleMenuCommand(windowHandle, menuHandle, i_menuItem);
     }
 
     // WM_PAINT reference: https://learn.microsoft.com/en-gb/windows/win32/gdi/wm-paint
@@ -259,36 +336,43 @@ catch (const std::exception& e)
 }
 
 static HICON loadIcon()
+try
 {
     // LoadImage reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-loadimagew
-    auto ret = static_cast<HICON>(LoadImage({}, IDI_APPLICATION, IMAGE_ICON, {}, {}, LR_DEFAULTSIZE | LR_SHARED));
+    auto ret(static_cast<HICON>(LoadImage({}, IDI_APPLICATION, IMAGE_ICON, {}, {}, LR_DEFAULTSIZE | LR_SHARED)));
     if (!ret)
         throw WindowsError(LOG_INFO "Failed to load icon");
 
     return ret;
 }
+LOG_RETHROW
 
 static HICON loadSmallIcon()
+try
 {
     // LoadImage reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-loadimagew
-    auto ret = static_cast<HICON>(LoadImage({}, IDI_APPLICATION, IMAGE_ICON, SM_CXSMICON, SM_CYSMICON, LR_SHARED));
+    auto ret(static_cast<HICON>(LoadImage({}, IDI_APPLICATION, IMAGE_ICON, SM_CXSMICON, SM_CYSMICON, LR_SHARED)));
     if (!ret)
         throw WindowsError(LOG_INFO "Failed to load small icon");
 
     return ret;
 }
+LOG_RETHROW
 
 static HCURSOR loadCursor()
+try
 {
     // LoadImage reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-loadimagew
-    auto ret = static_cast<HCURSOR>(LoadImage({}, IDC_ARROW, IMAGE_CURSOR, {}, {}, LR_SHARED | LR_DEFAULTSIZE));
+    auto ret(static_cast<HCURSOR>(LoadImage({}, IDC_ARROW, IMAGE_CURSOR, {}, {}, LR_SHARED | LR_DEFAULTSIZE)));
     if (!ret)
         throw WindowsError(LOG_INFO "Failed to load cursor");
 
     return ret;
 }
+LOG_RETHROW
 
 static HBRUSH loadBackground()
+try
 {
     // CreateSolidBrush reference: https://learn.microsoft.com/en-gb/windows/win32/api/wingdi/nf-wingdi-createsolidbrush
     HBRUSH ret(CreateSolidBrush(0x000000));
@@ -297,6 +381,7 @@ static HBRUSH loadBackground()
 
     return ret;
 }
+LOG_RETHROW
 
 static void registerClass(HINSTANCE instance, const wchar_t* className)
 try
@@ -323,16 +408,17 @@ try
 }
 LOG_RETHROW
 
-static HWND createWindow(HINSTANCE instance, const wchar_t* className, const wchar_t* title, int cmdShow)
+static HWND createWindow(HINSTANCE instance, const wchar_t* className, const wchar_t* title, int cmdShow, HMENU menu)
 try
 {
-    // CreateWindowEx reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-createwindowexa
+    // CreateWindowEx reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-createwindowexw
     // Window style constants: https://learn.microsoft.com/en-gb/windows/win32/winmsg/window-styles
     // Window extended style constants: https://learn.microsoft.com/en-gb/windows/win32/winmsg/extended-window-styles
-    // LoadMenuIndirect reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-loadmenuindirecta
 
     // style & WS_VISIBLE shows the window after creation.
+    // style & WS_TILEDWINDOW (a.k.a. WS_OVERLAPPEDWINDOW) gives the window a title bar (a.k.a. caption), min/max boxes, system menu, menu and sizing border (a.k.a. thick frame)
     // When x == CW_USEDEFAULT and y != CW_USEDEFAULT, y is used as the cmdShow parameter
+
     const unsigned long exStyle{};
     const unsigned long style(WS_TILEDWINDOW | WS_VISIBLE);
     const int x(CW_USEDEFAULT);
@@ -340,13 +426,67 @@ try
     const int width(CW_USEDEFAULT);
     const int height(CW_USEDEFAULT);
     HWND const windowParent{};
-    HMENU const menu{};
     void* const param{};
-    HWND const window = CreateWindowEx(exStyle, className, title, style, x, y, width, height, windowParent, menu, instance, param);
+    HWND const window(CreateWindowEx(exStyle, className, title, style, x, y, width, height, windowParent, menu, instance, param));
     if (!window)
         throw WindowsError(LOG_INFO "Failed to create "s + toString(title) + " window");
 
     return window;
+}
+LOG_RETHROW
+
+static HMENU createMenu(const Menu& menu)
+try
+{
+    // CreateMenu reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createmenu
+    // InsertMenuItem reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-insertmenuitemw
+
+    HMENU const menuHandle(CreateMenu());
+    if (!menuHandle)
+        throw WindowsError(LOG_INFO "Failed to create menu");
+    
+    index_t i_insertion{};
+    for (const MenuEntry& menuEntry : menu.entries)
+    {
+        std::wstring itemText(toWstring(menuEntry.text));
+
+        MENUITEMINFO info{};
+        info.cbSize = sizeof(info);
+        info.fMask = MIIM_STATE | MIIM_STRING | MIIM_SUBMENU;
+        if (menuEntry.isDisabled)
+            info.fState = MFS_DISABLED;
+
+        if (menuEntry.isSubmenu())
+        {
+            info.hSubMenu = createMenu(menuEntry.asSubmenu());
+        }
+
+        info.dwTypeData = itemText.data();
+
+        // I'm assuming one appends by specifying position i_insertion, the docs don't say
+        const bool isPositionalArgument(true);
+        if (!InsertMenuItem(menuHandle, unsigned(i_insertion), isPositionalArgument, &info))
+            throw WindowsError(LOG_INFO "Failed to create menu item "s + menuEntry.text);
+
+        ++i_insertion;
+    }
+
+    return menuHandle;
+}
+LOG_RETHROW
+
+static HMENU createWindowMenu(const Menu& menu)
+try
+{
+    HMENU const menuHandle(createMenu(menu));
+    MENUINFO info{};
+    info.cbSize = sizeof(info);
+    info.fMask = MIM_APPLYTOSUBMENUS | MIM_STYLE;
+    info.dwStyle = MNS_NOTIFYBYPOS;
+    if (!SetMenuInfo(menuHandle, &info))
+        throw WindowsError(LOG_INFO "Failed to set menu info");
+
+    return menuHandle;
 }
 LOG_RETHROW
 
@@ -432,14 +572,16 @@ try
 }
 LOG_RETHROW
 
-void Windows::spawnMainWindow(Window& window, std::string_view className, std::string_view title, std::any arg)
+void Windows::spawnMainWindow(MainWindow& window, std::string_view className, std::string_view title, std::any arg)
 try
 {
-    const std::wstring classNameW = toWstring(className);
-    registerClass(instance, classNameW.c_str());
+    const std::wstring className_wide(toWstring(className));
+    registerClass(instance, className_wide.c_str());
     
-    const int cmdShow = std::any_cast<MainWindowArg_t>(std::move(arg));
-    HWND const windowHandle = createWindow(instance, classNameW.c_str(), toWstring(title).c_str(), cmdShow);
+    const std::wstring title_wide(toWstring(title));
+    const int cmdShow(std::any_cast<MainWindowArg_t>(std::move(arg)));
+    HMENU const menu(createWindowMenu(*window.menu));
+    HWND const windowHandle(createWindow(instance, className_wide.c_str(), title_wide.c_str(), cmdShow, menu));
     windowMap[windowHandle] = &window;
 }
 LOG_RETHROW

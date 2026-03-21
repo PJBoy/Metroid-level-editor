@@ -12,6 +12,7 @@ export module os_windows;
 
 export import os;
 
+export import main_window;
 export import window;
 
 
@@ -68,6 +69,6 @@ public:
     int eventLoop() override;
     std::filesystem::path getDataDirectory() const override;
     void error(const std::string& errorText) const override;
-    void spawnMainWindow(Window& window, std::string_view className, std::string_view title, std::any arg) override;
+    void spawnMainWindow(MainWindow& window, std::string_view className, std::string_view title, std::any arg) override;
     void quit() override;
 };

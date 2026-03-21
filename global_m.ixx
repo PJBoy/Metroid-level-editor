@@ -23,3 +23,6 @@ constexpr std::string toHexString(T v, n_t n_bytes = sizeof(T))
     out << std::hex << std::uppercase << std::setfill('0') << std::setw(n_bytes * 2) << +v;
     return out.str();
 }
+
+export template<typename To, typename From>
+using ForwardLike = decltype(std::forward_like<From>(std::declval<To>()));

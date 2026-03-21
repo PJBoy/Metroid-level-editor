@@ -5,7 +5,7 @@ module;
 export module os;
 
 export import config;
-// export import window; // window module imports os module, so this is not allowed
+// import main_window; // window module et al imports os module, so this is not allowed
 
 export class Os
 {
@@ -33,6 +33,6 @@ public:
         p_config = &config;
     }
 
-    virtual void spawnMainWindow(class Window& window, std::string_view className, std::string_view title, std::any arg) = 0;
+    virtual void spawnMainWindow(class MainWindow& window, std::string_view className, std::string_view title, std::any arg) = 0;
     virtual void quit() = 0;
 };
