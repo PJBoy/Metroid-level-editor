@@ -78,6 +78,9 @@
     <ClCompile Include="gui\window.cpp">
       <Filter>Source Files\gui</Filter>
     </ClCompile>
+    <ClCompile Include="windows\window_layout.ixx">
+      <Filter>Header Files\gui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h">

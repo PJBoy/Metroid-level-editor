@@ -591,3 +591,98 @@ void Windows::quit()
     // PostQuitMessage reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-postquitmessage
     PostQuitMessage(EXIT_SUCCESS);
 }
+
+static std::uintptr_t CALLBACK openFileProcedure(HWND windowHandle, unsigned message, std::uintptr_t, LONG_PTR lParam) noexcept
+try
+{
+    // Open file name hook procedure reference: https://learn.microsoft.com/en-gb/windows/win32/api/commdlg/nc-commdlg-lpofnhookproc
+    // Open file name hook reference: https://learn.microsoft.com/en-gb/windows/win32/dlgbox/open-and-save-as-dialog-boxes#explorer-style-hook-procedures
+
+    switch (message)
+    {
+    default:
+        return false;
+
+    // WM_INITDIALOG reference: https://learn.microsoft.com/en-gb/windows/win32/dlgbox/wm-initdialog
+    case WM_INITDIALOG:
+        break;
+
+    // WM_NOTIFY reference: https://learn.microsoft.com/en-gb/windows/win32/controls/wm-notify
+    case WM_NOTIFY:
+    {
+        // NMHDR reference: https://learn.microsoft.com/en-gb/windows/win32/api/richedit/ns-richedit-nmhdr
+        // OFNOTIFY reference: https://learn.microsoft.com/en-gb/windows/win32/api/commdlg/ns-commdlg-ofnotifyw
+        // CDN_FILEOK reference: https://learn.microsoft.com/en-gb/windows/win32/dlgbox/cdn-fileok
+        // SetWindowLongPtr: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-setwindowlongptrw
+
+        const NMHDR* const p_header = reinterpret_cast<const NMHDR* const>(lParam);
+        if (p_header->code != CDN_FILEOK)
+            return false;
+
+        const OFNOTIFY* const p_notification = reinterpret_cast<const OFNOTIFY* const>(p_header);
+        auto& validator = *reinterpret_cast<FunctionRef<bool(std::filesystem::path)>*>(p_notification->lpOFN->lCustData);
+        std::filesystem::path filepath(p_notification->lpOFN->lpstrFile);
+        if (validator(std::move(filepath)))
+            return false;
+
+        SetLastError(0);
+        if (!SetWindowLongPtr(windowHandle, DWLP_MSGRESULT, ~0) && GetLastError())
+            throw WindowsError(LOG_INFO "Failed to reject file after failing ROM verification"s);
+
+        error(L"Not an acceptable file");
+
+        break;
+    }
+    }
+
+    return true;
+}
+catch (const std::exception& e)
+{
+    DebugFile(DebugFile::error) << LOG_INFO << e.what() << '\n';
+    return false;
+}
+
+std::optional<std::filesystem::path> Windows::chooseFile(std::span<const FileFilter> fileFilters, FunctionRef<bool(const std::filesystem::path&)> validator) const
+try
+{
+    // GetOpenFileName reference: https://learn.microsoft.com/en-gb/windows/win32/api/commdlg/nf-commdlg-getopenfilenamew
+    // CommDlgExtendedError reference: https://learn.microsoft.com/en-gb/windows/win32/api/commdlg/nf-commdlg-commdlgextendederror
+    // OPENFILENAME reference: https://learn.microsoft.com/en-us/windows/win32/api/commdlg/ns-commdlg-openfilenamew
+
+    std::wstring fileFilters_os;
+    for (FileFilter fileFilter : fileFilters)
+    {
+        fileFilters_os += toWstring(fileFilter.label);
+        fileFilters_os.push_back(L'\0');
+        fileFilters_os += toWstring(fileFilter.glob);
+        fileFilters_os.push_back(L'\0');
+    }
+
+    fileFilters_os += L"All files\0*\0"sv;
+
+
+    wchar_t filepath[0x100]; // Arbitrary. Unsure how I wanna handle larger file paths
+    filepath[0] = L'\0';
+
+    OPENFILENAME ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFilter = fileFilters_os.c_str();
+    ofn.lpstrFile = std::data(filepath);
+    ofn.nMaxFile = static_cast<unsigned long>(std::size(filepath));
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_ENABLEHOOK | OFN_EXPLORER | OFN_ENABLESIZING;
+    ofn.lpfnHook = openFileProcedure;
+    ofn.lCustData = reinterpret_cast<LONG_PTR>(&validator);
+    if (!GetOpenFileName(&ofn))
+    {
+        unsigned long error(CommDlgExtendedError());
+        if (error)
+            throw CommonDialogError(error);
+
+        // Cancelled
+        return {};
+    }
+
+    return std::filesystem::path(filepath);
+}
+LOG_RETHROW

@@ -7,6 +7,11 @@ export module os;
 export import config;
 // import main_window; // window module et al imports os module, so this is not allowed
 
+export struct FileFilter
+{
+    std::string_view label, glob;
+};
+
 export class Os
 {
 protected:
@@ -35,4 +40,5 @@ public:
 
     virtual void spawnMainWindow(class MainWindow& window, std::string_view className, std::string_view title, std::any arg) = 0;
     virtual void quit() = 0;
+    virtual std::optional<std::filesystem::path> chooseFile(std::span<const FileFilter> fileFilters, FunctionRef<bool(const std::filesystem::path&)> validator) const = 0;
 };

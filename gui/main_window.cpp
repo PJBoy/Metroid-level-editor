@@ -7,7 +7,17 @@ try
 {
     MenuEntry menu(MenuEntry::makeSubmenu());
     menu.text = "File";
-        
+    
+    {
+        MenuEntry open(MenuEntry::makeItem());
+        open.text = "Open";
+        open.asItem().action = [](Window& window)
+        {
+            static_cast<MainWindow&>(window).openRom();
+        };
+        menu.asSubmenu().entries.push_back(std::move(open));
+    }
+    
     {
         MenuEntry exit(MenuEntry::makeItem());
         exit.text = "Exit";
@@ -63,5 +73,26 @@ void MainWindow::onDestroy()
 try
 {
     p_os->quit();
+}
+LOG_RETHROW
+
+bool romValidator(const std::filesystem::path& filepath)
+try
+{
+    return false;
+}
+LOG_RETHROW
+
+void MainWindow::openRom()
+try
+{
+    const FileFilter fileFilters[]
+    {
+        {"ROM files",      "*.agb;*.gba;*.sfc;*.smc;"},
+        {"GBA ROM files",  "*.agb;*.gba;"},
+        {"SNES ROM files", "*.sfc;*.smc;"}
+    };
+
+    std::optional<std::filesystem::path> romPath = p_os->chooseFile(fileFilters, romValidator);
 }
 LOG_RETHROW

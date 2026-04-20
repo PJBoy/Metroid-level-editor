@@ -192,6 +192,7 @@
     <ClCompile Include="string_m.ixx" />
     <ClCompile Include="typedefs_m.ixx" />
     <ClCompile Include="gui\window_m.ixx" />
+    <ClCompile Include="windows\window_layout.ixx" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h" />

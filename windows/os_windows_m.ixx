@@ -71,4 +71,5 @@ public:
     void error(const std::string& errorText) const override;
     void spawnMainWindow(MainWindow& window, std::string_view className, std::string_view title, std::any arg) override;
     void quit() override;
+    std::optional<std::filesystem::path> chooseFile(std::span<const FileFilter> fileFilters, FunctionRef<bool(const std::filesystem::path&)> validator) const override;
 };

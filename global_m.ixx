@@ -26,3 +26,7 @@ constexpr std::string toHexString(T v, n_t n_bytes = sizeof(T))
 
 export template<typename To, typename From>
 using ForwardLike = decltype(std::forward_like<From>(std::declval<To>()));
+
+// Placeholder for std::function_ref
+export template<typename F>
+using FunctionRef = std::function<F>;
