@@ -13,7 +13,6 @@ export module os_windows;
 export import os;
 
 export import main_window;
-export import window;
 
 
 export class WindowsError : public std::runtime_error
@@ -69,7 +68,11 @@ public:
     int eventLoop() override;
     std::filesystem::path getDataDirectory() const override;
     void error(const std::string& errorText) const override;
-    void spawnMainWindow(MainWindow& window, std::string_view className, std::string_view title, std::any arg) override;
+    void spawnMainWindow(MainWindow& window, std::string_view title, std::any arg) override;
+    void spawnWindow(Window& window, unsigned width, unsigned height, unsigned x, unsigned y, const Window& windowParent) override;
+    std::array<unsigned, 2> getWindowSize(const Window& window) const override;
     void quit() override;
     std::optional<std::filesystem::path> chooseFile(std::span<const FileFilter> fileFilters, FunctionRef<bool(const std::filesystem::path&)> validator) const override;
+
+    HWND getWindowHandle(const Window& targetWindow);
 };

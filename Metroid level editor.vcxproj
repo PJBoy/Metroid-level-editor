@@ -106,6 +106,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>D2d1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -129,6 +130,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
+      <AdditionalDependencies>D2d1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -148,6 +150,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>D2d1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -171,6 +174,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
+      <AdditionalDependencies>D2d1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -179,11 +183,22 @@
     <ClCompile Include="debug.cpp" />
     <ClCompile Include="debug_m.ixx" />
     <ClCompile Include="global_m.ixx" />
+    <ClCompile Include="gui\level_window.cpp" />
+    <ClCompile Include="gui\level_window.ixx" />
     <ClCompile Include="gui\main_window.cpp" />
     <ClCompile Include="gui\main_window_m.ixx" />
+    <ClCompile Include="gui\renderer\d2d_renderer.cpp" />
+    <ClCompile Include="gui\renderer\d2d_renderer.ixx" />
+    <ClCompile Include="gui\renderer\renderer.ixx" />
+    <ClCompile Include="gui\window_layout.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="os_m.ixx" />
     <ClCompile Include="gui\window.cpp" />
+    <ClCompile Include="rom\rom.cpp" />
+    <ClCompile Include="rom\rom.ixx" />
+    <ClCompile Include="rom\sm.cpp" />
+    <ClCompile Include="rom\sm.ixx" />
+    <ClCompile Include="utility\data_reader.ixx" />
     <ClCompile Include="windows\main.cpp" />
     <ClCompile Include="windows\main_m.ixx" />
     <ClCompile Include="windows\os_windows.cpp" />
@@ -192,7 +207,7 @@
     <ClCompile Include="string_m.ixx" />
     <ClCompile Include="typedefs_m.ixx" />
     <ClCompile Include="gui\window_m.ixx" />
-    <ClCompile Include="windows\window_layout.ixx" />
+    <ClCompile Include="gui\window_layout.ixx" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h" />

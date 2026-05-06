@@ -35,3 +35,13 @@ Window::Window(Os& os)
 
 void Window::onDestroy()
 {}
+
+void Window::onPaint()
+{}
+
+void Window::create(unsigned width, unsigned height, unsigned origin_x, unsigned origin_y, const Window& windowParent)
+try
+{
+    p_os->spawnWindow(*this, width, height, origin_x, origin_y, windowParent);
+}
+LOG_RETHROW

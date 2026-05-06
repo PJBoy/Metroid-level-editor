@@ -6,6 +6,7 @@ export module os;
 
 export import config;
 // import main_window; // window module et al imports os module, so this is not allowed
+// export import window;
 
 export struct FileFilter
 {
@@ -38,7 +39,9 @@ public:
         p_config = &config;
     }
 
-    virtual void spawnMainWindow(class MainWindow& window, std::string_view className, std::string_view title, std::any arg) = 0;
+    virtual void spawnMainWindow(class MainWindow& window, std::string_view title, std::any arg) = 0;
+    virtual void spawnWindow(class Window& window, unsigned width, unsigned height, unsigned x, unsigned y, const class Window& windowParent) = 0;
+    virtual std::array<unsigned, 2> getWindowSize(const Window& window) const = 0;
     virtual void quit() = 0;
     virtual std::optional<std::filesystem::path> chooseFile(std::span<const FileFilter> fileFilters, FunctionRef<bool(const std::filesystem::path&)> validator) const = 0;
 };

@@ -60,12 +60,13 @@ try
 }
 LOG_RETHROW
 
-MainWindow::MainWindow(Os& os, std::any os_arg)
+MainWindow::MainWindow(Os& os, RendererFactory& rendererFactory, std::any os_arg)
 try
     : Window(os)
+    , p_rendererFactory(&rendererFactory)
 {
     menu = makeMenu();
-    p_os->spawnMainWindow(*this, "MainWindow", "Metroid level editor", std::move(os_arg));
+    p_os->spawnMainWindow(*this, "Metroid level editor", std::move(os_arg));
 }
 LOG_RETHROW
 
@@ -79,7 +80,7 @@ LOG_RETHROW
 bool romValidator(const std::filesystem::path& filepath)
 try
 {
-    return false;
+    return isValidRom(filepath);
 }
 LOG_RETHROW
 
@@ -94,5 +95,16 @@ try
     };
 
     std::optional<std::filesystem::path> romPath = p_os->chooseFile(fileFilters, romValidator);
+    if (!romPath)
+        return;
+
+    p_rom = loadRom(std::move(*romPath));
+    levelView = LevelWindow(*p_os, *p_rom);
+
+    windowLayout = WindowLayout::makeRow({{&levelView, window_layout::DeducedDimension()}});
+    auto [width, height] = p_os->getWindowSize(*this);
+    windowLayout.createWindows(width, height, 0, 0, *this);
+
+    levelView.init(*p_rendererFactory);
 }
 LOG_RETHROW

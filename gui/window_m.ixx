@@ -45,9 +45,14 @@ protected:
 public:
     std::optional<Menu> menu;
 
+    Window() = default;
     explicit Window(Os& os);
 
+    virtual std::string_view getName() const = 0;
     virtual void onDestroy();
+    virtual void onPaint();
+    
+    void create(unsigned width, unsigned height, unsigned origin_x, unsigned origin_y, const Window& windowParent);
 };
 
 template<typename Self>

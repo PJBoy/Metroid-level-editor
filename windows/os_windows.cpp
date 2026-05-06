@@ -16,6 +16,8 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <commdlg.h>
+#include <dlgs.h>
+#include <shlobj.h>
 #include <windowsx.h>
 
 #include <cstdio> // for std{in,out,err}
@@ -25,6 +27,7 @@ import os_windows;
 
 import string;
 
+const wchar_t* const className = L"MainWindow";
 
 static std::map<HWND, Window*> windowMap;
 
@@ -252,6 +255,71 @@ try
 }
 LOG_RETHROW
 
+namespace
+{
+class PaintStruct
+{
+public:
+    HDC deviceContextHandle{};
+    PAINTSTRUCT paintStruct;
+
+private:
+    HWND windowHandle;
+
+public:
+    PaintStruct() = default;
+    PaintStruct(PaintStruct&) = delete;
+    auto operator=(PaintStruct) = delete;
+
+    explicit PaintStruct(HWND windowHandle)
+        : windowHandle(windowHandle)
+    {
+        // BeginPaint reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-beginpaint
+        deviceContextHandle = BeginPaint(windowHandle, &paintStruct);
+        if (!deviceContextHandle)
+            throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint");
+    }
+
+    ~PaintStruct()
+    {
+        // EndPaint reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-endpaint
+        if (deviceContextHandle)
+            (void) EndPaint(windowHandle, &paintStruct);
+    }
+};
+}
+
+static void handlePaint(HWND windowHandle)
+try
+{
+    // GetUpdateRect reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-getupdaterect
+    // ValidateRect reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-validaterect
+
+    RECT updateRect;
+    BOOL notEmpty(GetUpdateRect(windowHandle, &updateRect, false));
+    if (!notEmpty)
+        return;
+        
+    DebugFile(DebugFile::info) << LOG_INFO "WM_PAINT for " << windowMap[windowHandle]->getName() << '\n';
+
+    // ValidateRect is called to acknowledge the paint message
+    // BeginPaint/EndPaint is only needed for the display device context (which is for GDI)
+
+    windowMap[windowHandle]->onPaint();
+
+    // Temporary
+    if (dynamic_cast<MainWindow*>(windowMap[windowHandle]))
+    {
+        PaintStruct ps(windowHandle);
+        const std::wstring_view displayText(L"Hello!"sv);
+        if (!TextOut(ps.deviceContextHandle, 0, 0, std::data(displayText), int(std::size(displayText))))
+            throw WindowsError(LOG_INFO "Failed to display text");
+    }
+    else if (!ValidateRect(windowHandle, {}))
+        throw WindowsError(LOG_INFO "Failed to validate window");
+}
+LOG_RETHROW
+
 static LRESULT CALLBACK windowProcedure(HWND windowHandle, unsigned message, std::uintptr_t wParam, LONG_PTR lParam) noexcept
 try
 {
@@ -302,26 +370,7 @@ try
     // WM_PAINT reference: https://learn.microsoft.com/en-gb/windows/win32/gdi/wm-paint
     case WM_PAINT:
     {
-        // GetUpdateRect reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-getupdaterect
-        RECT updateRect;
-        BOOL notEmpty(GetUpdateRect(windowHandle, &updateRect, false));
-        if (notEmpty)
-        {
-            // BeginPaint reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-beginpaint
-            // EndPaint reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-endpaint
-            PAINTSTRUCT ps;
-            const auto endPaint([&](HDC)
-            {
-                EndPaint(windowHandle, &ps);
-            });
-            const std::unique_ptr p_displayContext(makeUniquePtr(BeginPaint(windowHandle, &ps), endPaint));
-            if (!p_displayContext)
-                throw WindowsError(LOG_INFO "Failed to get display device context from BeginPaint");
-
-            const std::wstring displayText(L"Hello, Windows!");
-            if (!TextOut(p_displayContext.get(), 0, 0, std::data(displayText), static_cast<int>(std::size(displayText))))
-                throw WindowsError(LOG_INFO "Failed to display text");
-        }
+        handlePaint(windowHandle);
 
         break;
     }
@@ -383,7 +432,7 @@ try
 }
 LOG_RETHROW
 
-static void registerClass(HINSTANCE instance, const wchar_t* className)
+static void registerClass(HINSTANCE instance)
 try
 {
     // Window class article: https://learn.microsoft.com/en-gb/windows/win32/winmsg/about-window-classes
@@ -408,7 +457,7 @@ try
 }
 LOG_RETHROW
 
-static HWND createWindow(HINSTANCE instance, const wchar_t* className, const wchar_t* title, int cmdShow, HMENU menu)
+static HWND createWindow(HINSTANCE instance, const wchar_t* title, int cmdShow, HMENU menu)
 try
 {
     // CreateWindowEx reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-createwindowexw
@@ -572,16 +621,63 @@ try
 }
 LOG_RETHROW
 
-void Windows::spawnMainWindow(MainWindow& window, std::string_view className, std::string_view title, std::any arg)
+void Windows::spawnMainWindow(MainWindow& window, std::string_view title, std::any arg)
 try
 {
-    const std::wstring className_wide(toWstring(className));
-    registerClass(instance, className_wide.c_str());
+    registerClass(instance);
     
     const std::wstring title_wide(toWstring(title));
     const int cmdShow(std::any_cast<MainWindowArg_t>(std::move(arg)));
     HMENU const menu(createWindowMenu(*window.menu));
-    HWND const windowHandle(createWindow(instance, className_wide.c_str(), title_wide.c_str(), cmdShow, menu));
+    HWND const windowHandle(createWindow(instance, title_wide.c_str(), cmdShow, menu));
+    windowMap[windowHandle] = &window;
+}
+LOG_RETHROW
+
+static HWND createChildWindow(HINSTANCE instance, unsigned width, unsigned height, unsigned x, unsigned y, HWND windowParent)
+try
+{
+    // CreateWindowEx reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-createwindowexw
+    // Window style constants: https://learn.microsoft.com/en-gb/windows/win32/winmsg/window-styles
+    // Window extended style constants: https://learn.microsoft.com/en-gb/windows/win32/winmsg/extended-window-styles
+
+    // style & WS_VISIBLE shows the window after creation.
+    // style & WS_CHILD makes the window destroyed/hidden/moved if parent window is
+
+    const unsigned long exStyle{};
+    const unsigned long style(WS_CHILD | WS_VISIBLE | CS_HREDRAW | CS_VREDRAW);
+    const wchar_t* const title{};
+    HMENU const menu{};
+    void* const param{};
+    HWND const window(CreateWindowEx(exStyle, className, title, style, x, y, int(width), int(height), windowParent, menu, instance, param));
+    if (!window)
+        throw WindowsError(LOG_INFO "Failed to create "s + toString(title) + " window");
+
+    return window;
+}
+LOG_RETHROW
+
+static HWND getWindowHandle(const Window& targetWindow)
+{
+    for (const auto [handle, window] : windowMap)
+        if (window == &targetWindow)
+            return handle;
+    
+    throw std::runtime_error(LOG_INFO "Couldn't find window handle");
+}
+
+HWND Windows::getWindowHandle(const Window& targetWindow)
+try
+{
+    return ::getWindowHandle(targetWindow);
+}
+LOG_RETHROW
+
+void Windows::spawnWindow(Window& window, unsigned width, unsigned height, unsigned x, unsigned y, const Window& windowParent)
+try
+{
+    HWND const windowParentHandle = getWindowHandle(windowParent);
+    HWND const windowHandle = createChildWindow(instance, width, height, x, y, windowParentHandle);
     windowMap[windowHandle] = &window;
 }
 LOG_RETHROW
@@ -590,6 +686,14 @@ void Windows::quit()
 {
     // PostQuitMessage reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-postquitmessage
     PostQuitMessage(EXIT_SUCCESS);
+}
+
+namespace
+{
+    struct FileOpenDialogContext
+    {
+        FunctionRef<bool(const std::filesystem::path&)> validator;
+    };
 }
 
 static std::uintptr_t CALLBACK openFileProcedure(HWND windowHandle, unsigned message, std::uintptr_t, LONG_PTR lParam) noexcept
@@ -605,37 +709,42 @@ try
 
     // WM_INITDIALOG reference: https://learn.microsoft.com/en-gb/windows/win32/dlgbox/wm-initdialog
     case WM_INITDIALOG:
-        break;
+        return true;
 
     // WM_NOTIFY reference: https://learn.microsoft.com/en-gb/windows/win32/controls/wm-notify
     case WM_NOTIFY:
     {
         // NMHDR reference: https://learn.microsoft.com/en-gb/windows/win32/api/richedit/ns-richedit-nmhdr
-        // OFNOTIFY reference: https://learn.microsoft.com/en-gb/windows/win32/api/commdlg/ns-commdlg-ofnotifyw
+
+        const auto& header = *reinterpret_cast<const NMHDR*>(lParam);
+        
+        switch (header.code)
+        {
+        default:
+            return false;
+
         // CDN_FILEOK reference: https://learn.microsoft.com/en-gb/windows/win32/dlgbox/cdn-fileok
-        // SetWindowLongPtr: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-setwindowlongptrw
+        case CDN_FILEOK:
+        {
+            // OFNOTIFY reference: https://learn.microsoft.com/en-gb/windows/win32/api/commdlg/ns-commdlg-ofnotifyw
+            // SetWindowLongPtr reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-setwindowlongptrw
+            
+            const auto& notification = reinterpret_cast<const OFNOTIFY&>(header);
+            auto& context = *reinterpret_cast<FileOpenDialogContext*>(notification.lpOFN->lCustData);
+            std::filesystem::path filepath(notification.lpOFN->lpstrFile);
+            if (context.validator(std::move(filepath)))
+                return false;
 
-        const NMHDR* const p_header = reinterpret_cast<const NMHDR* const>(lParam);
-        if (p_header->code != CDN_FILEOK)
-            return false;
+            SetLastError(0);
+            if (!SetWindowLongPtr(windowHandle, DWLP_MSGRESULT, ~0) && GetLastError())
+                throw WindowsError(LOG_INFO "Failed to reject file after failing ROM verification"s);
 
-        const OFNOTIFY* const p_notification = reinterpret_cast<const OFNOTIFY* const>(p_header);
-        auto& validator = *reinterpret_cast<FunctionRef<bool(std::filesystem::path)>*>(p_notification->lpOFN->lCustData);
-        std::filesystem::path filepath(p_notification->lpOFN->lpstrFile);
-        if (validator(std::move(filepath)))
-            return false;
-
-        SetLastError(0);
-        if (!SetWindowLongPtr(windowHandle, DWLP_MSGRESULT, ~0) && GetLastError())
-            throw WindowsError(LOG_INFO "Failed to reject file after failing ROM verification"s);
-
-        error(L"Not an acceptable file");
-
-        break;
+            error(L"Not an acceptable file");
+            return true;
+        }
+        }
     }
     }
-
-    return true;
 }
 catch (const std::exception& e)
 {
@@ -643,12 +752,22 @@ catch (const std::exception& e)
     return false;
 }
 
+
 std::optional<std::filesystem::path> Windows::chooseFile(std::span<const FileFilter> fileFilters, FunctionRef<bool(const std::filesystem::path&)> validator) const
 try
 {
     // GetOpenFileName reference: https://learn.microsoft.com/en-gb/windows/win32/api/commdlg/nf-commdlg-getopenfilenamew
     // CommDlgExtendedError reference: https://learn.microsoft.com/en-gb/windows/win32/api/commdlg/nf-commdlg-commdlgextendederror
     // OPENFILENAME reference: https://learn.microsoft.com/en-us/windows/win32/api/commdlg/ns-commdlg-openfilenamew
+
+    // I spent a lot of time trying to make a hook precedure that filters the list of files based on file contents
+    // and have concluded it cannot be done, at least not without resorting to the disgusting Windows 3 dialog
+    // The hook precedure doesn't receive a message it can respond to exclude a file from listing
+    // (ignore OFN_ENABLEINCLUDENOTIFY, that's only for excluding non-normal files)
+    // and the parent window is a "virtual" list view, which ignores messages that do mutations (and yes I did try it anyway),
+    // so files can't be removed from the list manually either
+    // The newer file dialog API provided a function for this exact purpose `IFileDialog::SetFilter`,
+    // but was removed in Windows 7 (i.e. works exclusively on Vista)
 
     std::wstring fileFilters_os;
     for (FileFilter fileFilter : fileFilters)
@@ -661,18 +780,20 @@ try
 
     fileFilters_os += L"All files\0*\0"sv;
 
-
     wchar_t filepath[0x100]; // Arbitrary. Unsure how I wanna handle larger file paths
     filepath[0] = L'\0';
+
+    FileOpenDialogContext context;
+    context.validator = std::move(validator);
 
     OPENFILENAME ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.lpstrFilter = fileFilters_os.c_str();
     ofn.lpstrFile = std::data(filepath);
     ofn.nMaxFile = static_cast<unsigned long>(std::size(filepath));
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_ENABLEHOOK | OFN_EXPLORER | OFN_ENABLESIZING;
+    ofn.Flags = OFN_EXPLORER | OFN_ENABLEHOOK | OFN_FILEMUSTEXIST | OFN_ENABLESIZING;
     ofn.lpfnHook = openFileProcedure;
-    ofn.lCustData = reinterpret_cast<LONG_PTR>(&validator);
+    ofn.lCustData = reinterpret_cast<LONG_PTR>(&context);
     if (!GetOpenFileName(&ofn))
     {
         unsigned long error(CommDlgExtendedError());
@@ -684,5 +805,21 @@ try
     }
 
     return std::filesystem::path(filepath);
+}
+LOG_RETHROW
+
+std::array<unsigned, 2> Windows::getWindowSize(const Window& window) const
+try
+{
+    // RECT reference: https://learn.microsoft.com/en-gb/windows/win32/api/windef/ns-windef-rect
+    // GetClientRec reference: https://learn.microsoft.com/en-gb/windows/win32/api/winuser/nf-winuser-getclientrect
+    
+    HWND windowHandle = ::getWindowHandle(window);
+
+    RECT rect;
+    if (!GetClientRect(windowHandle, &rect))
+        throw WindowsError(LOG_INFO "Failed to get size of client area of window");
+
+    return {unsigned(rect.right), unsigned(rect.bottom)};
 }
 LOG_RETHROW

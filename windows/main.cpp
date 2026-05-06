@@ -6,7 +6,9 @@
 #include <cstdlib> // for EXIT_FAILURE
 
 import main;
+
 import os_windows;
+import d2d_renderer;
 
 // WinMain reference: https://learn.microsoft.com/en-gb/windows/win32/api/winbase/nf-winbase-winmain
 // wWinMain article: https://learn.microsoft.com/en-gb/windows/win32/learnwin32/winmain--the-application-entry-point
@@ -14,8 +16,9 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, wchar_t* cmdLine, Windows::
 try
 {
     Windows windows(instance);
+    D2dRendererFactory rendererFactory;
 
-    return main_common(windows, std::move(cmdShow));
+    return main_common(windows, rendererFactory, std::move(cmdShow));
 }
 catch (const std::exception& e)
 {

@@ -78,8 +78,41 @@
     <ClCompile Include="gui\window.cpp">
       <Filter>Source Files\gui</Filter>
     </ClCompile>
-    <ClCompile Include="windows\window_layout.ixx">
+    <ClCompile Include="gui\window_layout.ixx">
       <Filter>Header Files\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="rom\rom.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="rom\rom.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="rom\sm.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="rom\sm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="utility\data_reader.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="gui\window_layout.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="gui\renderer\d2d_renderer.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="gui\renderer\d2d_renderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="gui\renderer\renderer.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="gui\level_window.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="gui\level_window.ixx">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

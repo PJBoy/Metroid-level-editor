@@ -1,6 +1,8 @@
 export module main;
 
 export import os;
-import std;
+export import renderer;
 
-export int main_common(Os& os, std::any main_window_arg);
+export import std;
+
+export int main_common(Os& os, RendererFactory& rendererFactory, std::any main_window_arg);

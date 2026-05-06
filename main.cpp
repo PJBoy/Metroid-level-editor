@@ -4,7 +4,7 @@ import main;
 
 import main_window;
 
-int main_common(Os& os, std::any main_window_arg)
+int main_common(Os& os, RendererFactory& rendererFactory, std::any main_window_arg)
 try
 {
     DebugFile::init(os.getDataDirectory());
@@ -21,7 +21,7 @@ try
 
     os.init(config);
 
-    MainWindow mainWindow(os, std::move(main_window_arg));
+    MainWindow mainWindow(os, rendererFactory, std::move(main_window_arg));
 
     return os.eventLoop();
 }
