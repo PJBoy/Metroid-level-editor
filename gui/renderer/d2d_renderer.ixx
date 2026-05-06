@@ -8,7 +8,7 @@ export module d2d_renderer;
 
 export import renderer;
 
-import os_windows; // Direct2D is Windows specific and I can't pretend otherwise
+export import os_windows; // Direct2D is Windows specific and I can't pretend otherwise
 
 export struct Size
 {
@@ -24,6 +24,8 @@ export struct Size
 
 export class D2dBitmap : public renderer::Bitmap
 {
+    // ID2D1Bitmap reference: https://learn.microsoft.com/en-us/windows/win32/api/d2d1/nn-d2d1-id2d1bitmap
+
     Size size;
     ID2D1Bitmap* p_bitmap;
 
@@ -38,6 +40,7 @@ public:
     ID2D1Bitmap& getBitmap();
 };
 
+// Offers operations that require wrapping with BeginDraw and EndDraw
 export class D2dWindowDrawer : public WindowDrawer
 {
     ID2D1HwndRenderTarget* p_renderTarget;
@@ -54,6 +57,8 @@ public:
 
 export class D2dWindowRenderer : public WindowRenderer
 {
+    // ID2D1HwndRenderTarget reference: https://learn.microsoft.com/en-us/windows/win32/api/d2d1/nn-d2d1-id2d1hwndrendertarget
+
     ID2D1HwndRenderTarget* p_renderTarget;
 
 public:
@@ -66,6 +71,8 @@ public:
 
 export class D2dRendererFactory : public RendererFactory
 {
+    // ID2D1Factory reference: https://learn.microsoft.com/en-us/windows/win32/api/d2d1/nn-d2d1-id2d1factory
+
     ID2D1Factory* p_factory;
 
 public:

@@ -51,6 +51,17 @@ public:
     CommonDialogError(unsigned long errorId, const std::string& extraMessage) noexcept;
 };
 
+export class ComError : public std::runtime_error
+{
+protected:
+    static std::string makeMessage(long result) noexcept;
+    static std::string makeMessage(long result, const std::string& extraMessage) noexcept;
+
+public:
+    ComError(long result) noexcept;
+    ComError(long result, const std::string& extraMessage) noexcept;
+};
+
 
 export class Windows final : public Os
 {

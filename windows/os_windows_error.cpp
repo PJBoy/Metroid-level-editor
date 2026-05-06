@@ -17,7 +17,7 @@ import string;
 std::wstring WindowsError::getErrorMessage(unsigned long errorId)
 try
 {
-    // FormatMessage reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ms679351
+    // FormatMessage reference: https://learn.microsoft.com/en-gb/windows/win32/api/winbase/nf-winbase-formatmessage
     const unsigned long flags(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS);
     const void* const source{};
     const unsigned long languageId(MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT));
@@ -196,4 +196,114 @@ CommonDialogError::CommonDialogError(const std::string& extraMessage) noexcept
 
 CommonDialogError::CommonDialogError(unsigned long errorId, const std::string& extraMessage) noexcept
     : std::runtime_error(makeMessage(errorId, extraMessage))
+{}
+
+
+// ComError
+std::string ComError::makeMessage(long result) noexcept
+try
+{
+    const unsigned facility = HRESULT_FACILITY(result);
+    const unsigned code = HRESULT_CODE(result);
+
+    std::string ret = "COM error occurred. Facility 0x";
+    ret += std::to_string(facility);
+    ret += " (";
+    switch (facility)
+    {
+    default:
+        ret += "unknown";
+        break;
+
+    #define CASE(code) \
+    case code: \
+        ret += #code; \
+        break; \
+
+        CASE(FACILITY_NULL)
+        CASE(FACILITY_RPC)
+        CASE(FACILITY_DISPATCH)
+        CASE(FACILITY_STORAGE)
+        CASE(FACILITY_ITF)
+        CASE(FACILITY_WIN32)
+        CASE(FACILITY_WINDOWS)
+        CASE(FACILITY_SECURITY) // AKA FACILITY_SSPI
+        CASE(FACILITY_CONTROL)
+        CASE(FACILITY_CERT)
+        CASE(FACILITY_INTERNET)
+        CASE(FACILITY_MEDIASERVER)
+        CASE(FACILITY_MSMQ)
+        CASE(FACILITY_SETUPAPI)
+        CASE(FACILITY_SCARD)
+        CASE(FACILITY_COMPLUS)
+        CASE(FACILITY_AAF)
+        CASE(FACILITY_URT)
+        CASE(FACILITY_ACS)
+        CASE(FACILITY_DPLAY)
+        CASE(FACILITY_UMI)
+        CASE(FACILITY_SXS)
+        CASE(FACILITY_WINDOWS_CE)
+        CASE(FACILITY_HTTP)
+        CASE(FACILITY_USERMODE_COMMONLOG)
+        CASE(FACILITY_USERMODE_FILTER_MANAGER)
+        CASE(FACILITY_BACKGROUNDCOPY)
+        CASE(FACILITY_CONFIGURATION)
+        CASE(FACILITY_STATE_MANAGEMENT)
+        CASE(FACILITY_METADIRECTORY)
+        CASE(FACILITY_WINDOWSUPDATE)
+        CASE(FACILITY_DIRECTORYSERVICE)
+        CASE(FACILITY_GRAPHICS)
+        CASE(FACILITY_SHELL)
+        CASE(FACILITY_TPM_SERVICES)
+        CASE(FACILITY_TPM_SOFTWARE)
+        CASE(FACILITY_PLA)
+        CASE(FACILITY_FVE)
+        CASE(FACILITY_FWP)
+        CASE(FACILITY_WINRM)
+        CASE(FACILITY_NDIS)
+        CASE(FACILITY_USERMODE_HYPERVISOR)
+        CASE(FACILITY_CMI)
+        CASE(FACILITY_USERMODE_VIRTUALIZATION)
+        CASE(FACILITY_USERMODE_VOLMGR)
+        CASE(FACILITY_BCD)
+        CASE(FACILITY_USERMODE_VHD)
+        CASE(FACILITY_SDIAG)
+        CASE(FACILITY_WEBSERVICES)
+        CASE(FACILITY_WINDOWS_DEFENDER)
+        CASE(FACILITY_OPC)
+    #undef CASE
+    }
+
+    ret += ") - code ";
+    ret += std::to_string(code);
+
+    if (facility == FACILITY_WIN32)
+    {
+        ret += ": ";
+        ret += WindowsError(code).what();
+    }
+
+    return ret;
+}
+catch (const std::exception&)
+{
+    return "COM error occurred. Unknown error. An exception was thrown during error message construction.";
+}
+
+std::string ComError::makeMessage(long result, const std::string& extraMessage) noexcept
+try
+{
+    return makeMessage(result) + ' ' + extraMessage;
+}
+catch (const std::exception&)
+{
+    return "COM error occurred. Unknown error. An exception was thrown during error message construction.";
+}
+
+ComError::ComError(long result) noexcept
+    : std::runtime_error(makeMessage(result))
+{}
+
+ComError::ComError(long result, const std::string& extraMessage) noexcept
+    : std::runtime_error(makeMessage(result, extraMessage))
 {}
