@@ -6,7 +6,7 @@ import sm;
 
 std::unique_ptr<Rom> loadRom(std::filesystem::path filepath)
 {
-    std::unique_ptr<Sm> p_sm = sm::loadRom(filepath);
+    std::unique_ptr<Sm> p_sm = Sm::loadRom(filepath);
     if (p_sm)
         return p_sm;
 
@@ -15,5 +15,5 @@ std::unique_ptr<Rom> loadRom(std::filesystem::path filepath)
 
 bool isValidRom(const std::filesystem::path& filepath) noexcept
 {
-    return sm::isValidRom(filepath);
+    return Sm::isValidRom(filepath);
 }

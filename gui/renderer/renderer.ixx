@@ -38,7 +38,7 @@ public:
 
     virtual std::unique_ptr<WindowDrawer> makeDrawer() = 0;
 
-    // `data` must be 32bpp BGRA with A = 0xFF
+    // `data` must be 32bpp BGRA with A = 0 or 0xFF
     virtual std::unique_ptr<renderer::Bitmap> makeBitmap(std::span<const uint8_t> data, renderer::Size size) = 0;
 };
 

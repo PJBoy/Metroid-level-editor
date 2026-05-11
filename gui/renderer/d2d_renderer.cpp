@@ -26,7 +26,7 @@ try
 
     const n_t rowBytes = size.width * 4;
     const D2D1_BITMAP_PROPERTIES bitmapProperties = D2D1::BitmapProperties(pixelFormat);
-    long result = renderTarget.CreateBitmap(size, std::data(data), rowBytes, bitmapProperties, &p_bitmap);
+    long result = renderTarget.CreateBitmap(size, std::data(data), unsigned(rowBytes), bitmapProperties, &p_bitmap);
     if (result < 0)
         throw ComError(result);
 }
@@ -107,7 +107,11 @@ LOG_RETHROW
 std::unique_ptr<renderer::Bitmap> D2dWindowRenderer::makeBitmap(std::span<const uint8_t> data, renderer::Size size)
 try
 {
-    return std::unique_ptr<renderer::Bitmap>(new D2dBitmap(data, size, *p_renderTarget));
+    std::unique_ptr<renderer::Bitmap> ret(new D2dBitmap(data, size, *p_renderTarget));
+    if (!ret)
+        throw std::runtime_error(LOG_INFO "Failed to make D2dBitmap");
+
+    return ret;
 }
 LOG_RETHROW
 

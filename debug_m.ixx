@@ -8,8 +8,7 @@ using namespace std::string_literals;
 
 export class DebugFile : public std::ofstream
 {
-    // MSVC bug: making this static variable inline causes the following const inline statics to be empty strings
-    static std::filesystem::path dataDirectory;
+    inline static std::filesystem::path dataDirectory;
 
 public:
     const inline static std::filesystem::path

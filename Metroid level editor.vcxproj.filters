@@ -114,6 +114,12 @@
     <ClCompile Include="gui\level_window.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="utility\data_reader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="utility\array2d.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h">

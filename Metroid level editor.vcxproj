@@ -198,6 +198,8 @@
     <ClCompile Include="rom\rom.ixx" />
     <ClCompile Include="rom\sm.cpp" />
     <ClCompile Include="rom\sm.ixx" />
+    <ClCompile Include="utility\array2d.ixx" />
+    <ClCompile Include="utility\data_reader.cpp" />
     <ClCompile Include="utility\data_reader.ixx" />
     <ClCompile Include="windows\main.cpp" />
     <ClCompile Include="windows\main_m.ixx" />
