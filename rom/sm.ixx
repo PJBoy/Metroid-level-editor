@@ -22,8 +22,6 @@ using byte_t = uint8_t;
 using word_t = uint16_t;
 using long_t = uint32_t;
 
-using metatileBitmap_t = std::array<std::array<rom::Abgr16, 0x10>, 0x10>;
-
 struct StateCondition
 {
     SnesAddress address;
@@ -102,6 +100,8 @@ struct TilesetHeader
 
 struct Mode1Tileset;
 struct Mode7Tileset;
+struct MetatileBitmap;
+using metatileBitmaps_t = std::array<std::array<MetatileBitmap, 2>, 2>;
 }
 
 export class Sm : public Rom
@@ -130,5 +130,5 @@ private:
     void loadRoom(SnesAddress roomAddress);
     void loadState(SnesAddress stateAddress);
     sm::Mode1Tileset makeMode1Tileset(index_t i_tileset, bool isExtraLarge, bool isCeres) const;
-    std::vector<sm::metatileBitmap_t> drawMode1Tileset(index_t i_tileset, bool isExtraLarge, bool isCeres) const;
+    std::vector<sm::metatileBitmaps_t> drawMode1Tileset(index_t i_tileset, bool isExtraLarge, bool isCeres) const;
 };

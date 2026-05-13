@@ -324,6 +324,12 @@ try
 }
 LOG_RETHROW
 
+struct sm::MetatileBitmap
+{
+    std::array<std::array<rom::Abgr16, 8>, 8> data;
+    bool hasPriority;
+};
+
 Array2d<rom::Abgr16> Sm::drawRoom(rom::Address address) const
 try
 {
@@ -336,31 +342,73 @@ try
 
     const bool isExtraLarge = roomHeader.creBitset & 4;
     const bool isCeres = roomHeader.areaIndex == 6;
-    std::vector<metatileBitmap_t> tileset = drawMode1Tileset(stateHeader.tilesetIndex, isExtraLarge, isCeres);
+    const std::vector<metatileBitmaps_t> tileset = drawMode1Tileset(stateHeader.tilesetIndex, isExtraLarge, isCeres);
 
     Array2d<rom::Abgr16> bitmap({.n_y = roomHeader.height * 0x100u, .n_x = roomHeader.width * 0x100u});
+    std::fill_n(std::data(bitmap), std::size(bitmap), rom::Abgr16{0x8000});
 
     const n_t n_y_blocks = roomHeader.height * 0x10, n_x_blocks = roomHeader.width * 0x10;
     for (index_t y_block{}; y_block < n_y_blocks; ++y_block)
         for (index_t x_block{}; x_block < n_x_blocks; ++x_block)
         {
-            const word_t block = levelData.level[y_block * n_x_blocks + x_block];
-            //const word_t block = y_block * n_x_blocks + x_block;
-            const index_t i_metatile = block & 0x3FF;
-            const bool isBlockFlipped_x = block >> 0xA & 1;
-            const bool isBlockFlipped_y = block >> 0xB & 1;
+            const bool hasBackground = !levelData.background.empty();
+            const index_t i_block = y_block * n_x_blocks + x_block;
+            const word_t levelBlock = levelData.level[i_block];
+            const word_t backgroundBlock = !hasBackground ? 0 : levelData.background[i_block];
             
-            if (i_metatile > std::size(tileset))
-                throw std::out_of_range(LOG_INFO "Out of bounds metatile index");
+            const index_t i_levelMetatile = levelBlock & 0x3FF;
+            const index_t i_backgroundMetatile = backgroundBlock & 0x3FF;
+            const bool isLevelBlockFlipped_x = levelBlock >> 0xA & 1;
+            const bool isLevelBlockFlipped_y = levelBlock >> 0xB & 1;
+            const bool isBackgroundBlockFlipped_x = backgroundBlock >> 0xA & 1;
+            const bool isBackgroundBlockFlipped_y = backgroundBlock >> 0xB & 1;
+            
+            if (i_levelMetatile > std::size(tileset))
+                throw std::out_of_range(LOG_INFO "Out of bounds level metatile index");
+            
+            if (i_backgroundMetatile > std::size(tileset))
+                throw std::out_of_range(LOG_INFO "Out of bounds background metatile index");
+            
+            for (index_t i_y_tile{}; i_y_tile < 2; ++i_y_tile)
+                for (index_t i_x_tile{}; i_x_tile < 2; ++i_x_tile)
+                {
+                    auto drawTile = [&](const MetatileBitmap& metatile, bool isBlockFlipped_x, bool isBlockFlipped_y)
+                    {
+                        for (index_t y{}; y < 8; ++y)
+                            for (index_t x{}; x < 8; ++x)
+                            {
+                                index_t
+                                    y_bitmap = y_block * 0x10 + i_y_tile * 8,
+                                    x_bitmap = x_block * 0x10 + i_x_tile * 8;
 
-            const metatileBitmap_t& metatile = tileset[i_metatile];
-            for (index_t y{}; y < 0x10; ++y)
-            {
-                index_t y_bitmap = !isBlockFlipped_y ? y : 0xF - y;
-                if (!isBlockFlipped_x)
-                    std::ranges::copy(metatile[y], &bitmap[y_block * 0x10 + y_bitmap][x_block * 0x10]);
-                else
-                    std::ranges::reverse_copy(metatile[y], &bitmap[y_block * 0x10 + y_bitmap][x_block * 0x10]);
+                                y_bitmap += !isBlockFlipped_y ? y : 7 - y;
+                                x_bitmap += !isBlockFlipped_x ? x : 7 - x;
+
+                                if (!(metatile.data[y][x].colour & 0x8000) || bitmap[y_bitmap][x_bitmap].colour & 0x8000)
+                                    bitmap[y_bitmap][x_bitmap] = metatile.data[y][x];
+                            }
+                    };
+                    
+                    const index_t
+                        i_x_levelTile = !isLevelBlockFlipped_x ? i_x_tile : 1 - i_x_tile,
+                        i_y_levelTile = !isLevelBlockFlipped_y ? i_y_tile : 1 - i_y_tile,
+                        i_x_backgroundTile = !isBackgroundBlockFlipped_x ? i_x_tile : 1 - i_x_tile,
+                        i_y_backgroundTile = !isBackgroundBlockFlipped_y ? i_y_tile : 1 - i_y_tile;
+
+                    const MetatileBitmap& levelMetatile = tileset[i_levelMetatile][i_y_levelTile][i_x_levelTile];
+                    const MetatileBitmap& backgroundMetatile = tileset[i_backgroundMetatile][i_y_backgroundTile][i_x_backgroundTile];
+
+                    // drawTile(y_block * n_x_blocks + x_block & 0x3FF)
+                    if (hasBackground && backgroundMetatile.hasPriority && !levelMetatile.hasPriority)
+                    {
+                        drawTile(levelMetatile, isLevelBlockFlipped_x, isLevelBlockFlipped_y);
+                        drawTile(backgroundMetatile, isBackgroundBlockFlipped_x, isBackgroundBlockFlipped_y);
+                    }
+                    else
+                    {
+                        drawTile(backgroundMetatile, isBackgroundBlockFlipped_x, isBackgroundBlockFlipped_y);
+                        drawTile(levelMetatile, isLevelBlockFlipped_x, isLevelBlockFlipped_y);
+                    }
             }
         }
 
@@ -532,23 +580,27 @@ try
 }
 LOG_RETHROW
 
-static metatileBitmap_t drawMode1Metatile(Mode1Tileset::metatile_t metatile, const Mode1Tileset& tileset)
+static metatileBitmaps_t drawMode1Metatile(Mode1Tileset::metatile_t metatile, const Mode1Tileset& tileset)
 try
 {
-    metatileBitmap_t bitmap;
+    metatileBitmaps_t bitmaps;
     for (index_t i_y_tile{}; i_y_tile < 2; ++i_y_tile)
         for (index_t i_x_tile{}; i_x_tile < 2; ++i_x_tile)
         {
+            MetatileBitmap& bitmap = bitmaps[i_y_tile][i_x_tile];
             const word_t tilemapEntry = metatile[i_y_tile * 2 + i_x_tile];
+            
             const index_t i_tileGfx = tilemapEntry & 0x3FF;
             const index_t i_palette = tilemapEntry >> 0xA & 7;
-            const bool hasPriority = tilemapEntry >> 0xD & 1; // TODO
+            const bool hasPriority = tilemapEntry >> 0xD & 1;
             const bool isFlipped_x = tilemapEntry >> 0xE & 1;
             const bool isFlipped_y = tilemapEntry >> 0xF;
 
             const Mode1Tileset::palette_t& palette = tileset.palettes[i_palette];
             if (i_tileGfx > std::size(tileset.tileGfxs))
                 throw std::out_of_range(LOG_INFO "Out of bounds tile GFX index");
+
+            bitmap.hasPriority = hasPriority;
 
             const Mode1Tileset::tileGfx_t& tileGfx = tileset.tileGfxs[i_tileGfx];
             for (index_t y{}; y < 8; ++y)
@@ -567,20 +619,20 @@ try
                     if (i_colour == 0)
                         colour |= 0x8000; // Transparent
 
-                    bitmap[i_y_tile * 8 + y_pixel][i_x_tile * 8 + x_pixel].colour = colour;
+                    bitmap.data[y_pixel][x_pixel].colour = colour;
                 }
         }
 
-    return bitmap;
+    return bitmaps;
 }
 LOG_RETHROW
 
-std::vector<metatileBitmap_t> Sm::drawMode1Tileset(index_t i_tileset, bool isExtraLarge, bool isCeres) const
+std::vector<metatileBitmaps_t> Sm::drawMode1Tileset(index_t i_tileset, bool isExtraLarge, bool isCeres) const
 try
 {
     const Mode1Tileset tileset = makeMode1Tileset(i_tileset, isExtraLarge, isCeres);
     const n_t n_metatiles = std::size(tileset.metatiles);
-    std::vector<metatileBitmap_t> bitmaps;
+    std::vector<metatileBitmaps_t> bitmaps;
     bitmaps.reserve(n_metatiles);
     for (const Mode1Tileset::metatile_t metatile : tileset.metatiles)
         bitmaps.push_back(drawMode1Metatile(metatile, tileset));
