@@ -42,6 +42,17 @@ public:
     // Return a subspan of data
     std::span<const uint8_t> peekBytes(data_reader::Address address, n_t n_bytes) const;
 
+    template<n_t n_bytes>
+    constexpr auto peekInt() const;
+    
+    template<n_t n_bytes, n_t n_ints>
+    constexpr auto peekInts() const;
+
+    template<n_t n_bytes>
+    constexpr void peekIntsTo(auto&... vars) const;
+    
+    std::span<const uint8_t> peekBytes(n_t n_bytes) const;
+
     // Read functions do peak operations using and advancing the working address
     template<n_t n_bytes>
     constexpr auto readInt();
@@ -88,6 +99,24 @@ constexpr void DataReader::peekIntsTo(data_reader::Address address, auto&... var
     std::tie(vars...) = peekInts<n_bytes, sizeof...(vars)>(address);
 }
 
+template<n_t n_bytes>
+constexpr auto DataReader::peekInt() const
+{
+    return peekInt<n_bytes>({address});
+}
+    
+template<n_t n_bytes, n_t n_ints>
+constexpr auto DataReader::peekInts() const
+{
+    return peekInts<n_bytes, n_ints>({address});
+}
+
+template<n_t n_bytes>
+constexpr void DataReader::peekIntsTo(auto&... vars) const
+{
+    return peekIntsTo<n_bytes>({address}, vars...);
+}
+    
 template<n_t n_bytes>
 constexpr auto DataReader::readInt()
 {

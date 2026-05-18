@@ -42,6 +42,7 @@ ID2D1Bitmap& D2dBitmap::getBitmap()
     return *p_bitmap;
 }
 
+
 D2dWindowDrawer::D2dWindowDrawer(ID2D1HwndRenderTarget& renderTarget)
     : p_renderTarget(&renderTarget)
 {
@@ -73,6 +74,7 @@ void D2dWindowDrawer::drawBitmap(renderer::Bitmap& bitmap_in)
     const D2D1_BITMAP_INTERPOLATION_MODE interpolationMode = D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
     p_renderTarget->DrawBitmap(&bitmap.getBitmap(), destinationRectangle, opacity, interpolationMode, sourceRectangle);
 }
+
 
 D2dWindowRenderer::D2dWindowRenderer(ID2D1Factory& factory, const Window& window, Windows& os)
 try
@@ -114,6 +116,7 @@ try
     return ret;
 }
 LOG_RETHROW
+
 
 D2dRendererFactory::D2dRendererFactory()
 try

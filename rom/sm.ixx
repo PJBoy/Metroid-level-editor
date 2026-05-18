@@ -86,7 +86,40 @@ struct LevelData
     std::vector<byte_t> bts;
 
     LevelData() = default;
-    explicit LevelData(DataReader& r);
+    explicit LevelData(DataReader& reader);
+};
+
+struct FxHeaderEntry
+{
+    SnesAddress address;
+
+    word_t
+        doorAddress,
+        baseYPosition,
+        targetYPosition,
+        yVelocity;
+
+    byte_t
+        timer,
+        type,
+        defaultLayerBlend,
+        fxLayer3LayerBlend,
+        liquidOptions,
+        paletteFxBitset,
+        animatedTilesBitset,
+        paletteBlend;
+    
+    FxHeaderEntry() = default;
+    explicit FxHeaderEntry(DataReader& reader);
+};
+
+struct FxHeader
+{
+    SnesAddress address;
+    std::vector<FxHeaderEntry> entries;
+    
+    FxHeader() = default;
+    explicit FxHeader(DataReader& reader);
 };
 
 struct TilesetHeader
@@ -98,10 +131,24 @@ struct TilesetHeader
     explicit TilesetHeader(DataReader& reader);
 };
 
+struct AnimatedTilesHeader
+{
+    SnesAddress address;
+
+    word_t
+        instructionListAddress,
+        size,
+        vramAddress;
+    
+    AnimatedTilesHeader() = default;
+    explicit AnimatedTilesHeader(DataReader& reader);
+};
+
 struct Mode1Tileset;
 struct Mode7Tileset;
-struct MetatileBitmap;
-using metatileBitmaps_t = std::array<std::array<MetatileBitmap, 2>, 2>;
+struct TileBitmap;
+struct ZPixel;
+using metatileBitmaps_t = std::array<std::array<TileBitmap, 2>, 2>;
 }
 
 export class Sm : public Rom
@@ -130,5 +177,10 @@ private:
     void loadRoom(SnesAddress roomAddress);
     void loadState(SnesAddress stateAddress);
     sm::Mode1Tileset makeMode1Tileset(index_t i_tileset, bool isExtraLarge, bool isCeres) const;
-    std::vector<sm::metatileBitmaps_t> drawMode1Tileset(index_t i_tileset, bool isExtraLarge, bool isCeres) const;
+    Array2d<sm::ZPixel> drawRoomFx
+    (
+        const sm::FxHeaderEntry* p_fx, 
+        n_t n_y_tiles, n_t n_x_tiles, 
+        std::span<const std::array<sm::word_t, 0x10>, 8> palettes
+    ) const;
 };

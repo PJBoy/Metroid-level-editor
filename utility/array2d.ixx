@@ -24,6 +24,7 @@ public:
     Array2d() = default;
     explicit Array2d(Sizes sizes);
 
+    // Provides support for std::size and std::data
     T* data();
     const T* data() const;
     n_t size() const;

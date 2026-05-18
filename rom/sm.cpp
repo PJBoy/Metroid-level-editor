@@ -275,11 +275,44 @@ try
 LOG_RETHROW
 
 
+FxHeaderEntry::FxHeaderEntry(DataReader& reader)
+try
+{
+    address = reader.tell();
+    reader.readIntsTo<2>(doorAddress, baseYPosition, targetYPosition, yVelocity);
+    reader.readIntsTo<1>(timer, type, defaultLayerBlend, fxLayer3LayerBlend, liquidOptions, paletteFxBitset, animatedTilesBitset, paletteBlend);
+}
+LOG_RETHROW
+
+
+FxHeader::FxHeader(DataReader& reader)
+try
+{
+    address = reader.tell();
+    while (reader.peekInt<2>() != 0xFFFF)
+    {
+        entries.push_back(FxHeaderEntry(reader));
+        if (entries.back().doorAddress == 0)
+            break;
+    }
+}
+LOG_RETHROW
+
+
 TilesetHeader::TilesetHeader(DataReader& reader)
 try
 {
     address = reader.tell();
     reader.readIntsTo<3>(metatilesAddress, tileGfxsAddress, palettesAddress);
+}
+LOG_RETHROW
+
+
+AnimatedTilesHeader::AnimatedTilesHeader(DataReader& reader)
+try
+{
+    address = reader.tell();
+    reader.readIntsTo<2>(instructionListAddress, size, vramAddress);
 }
 LOG_RETHROW
 
@@ -320,15 +353,559 @@ try
     loadTilesetTable();
 
     // Temporary
-    loadRoom(0x8F'D78F_sm);
+    loadRoom(0x8F'D78F_sm); // Pre-Draygon room
+    loadRoom(0x8F'AF14_sm); // Lava dive room
+    loadRoom(0x8F'9D19_sm); // Charge beam room
 }
 LOG_RETHROW
 
-struct sm::MetatileBitmap
+struct sm::Mode1Tileset
+{
+    using metatile_t = std::array<word_t, 4>; // Tilemap entries for 4 tiles: up-left, up-right, down-left, down-right
+    using tileGfx_t = std::array<byte_t, 0x20>; // 4bpp planar
+    using palette_t = std::array<word_t, 0x10>; // 15-bit BGR (with unused MSb)
+
+    std::array<metatile_t, 0x400> metatiles;
+    std::array<tileGfx_t, 0x400> tileGfxs;
+    std::array<palette_t, 8> palettes;
+};
+
+struct sm::Mode7Tileset // Possibly too large for stack allocation
+{
+    using metatile_t = std::array<word_t, 4>;
+    using tileGfx_t = std::array<byte_t, 0x40>;
+    using palette_t = std::array<word_t, 0x80>;
+
+    std::array<metatile_t, 0x400> metatiles; // Always 2000h bytes
+    std::array<tileGfx_t, 0x200> tileGfxs; // Always 8000h bytes
+    palette_t palette; // Always 100h bytes
+};
+
+struct sm::TileBitmap
 {
     std::array<std::array<rom::Abgr16, 8>, 8> data;
     bool hasPriority;
 };
+
+static TileBitmap draw2bppTile(
+    word_t tilemapEntry, 
+    std::span<const std::array<byte_t, 0x10>> tileGfxs, // todo
+    std::span<const Mode1Tileset::palette_t, 2> palettes // todo
+)
+try
+{
+    TileBitmap bitmap;
+            
+    const index_t i_tileGfx = tilemapEntry & 0x3FF;
+    const index_t i_palette = tilemapEntry >> 0xA & 7;
+    const bool hasPriority = tilemapEntry >> 0xD & 1;
+    const bool isFlipped_x = tilemapEntry >> 0xE & 1;
+    const bool isFlipped_y = tilemapEntry >> 0xF;
+
+    if (i_tileGfx > std::size(tileGfxs))
+        throw std::out_of_range(LOG_INFO "Out of bounds tile GFX index");
+
+    bitmap.hasPriority = hasPriority;
+
+    std::span<const word_t, 4> palette(&palettes[i_palette / 4][i_palette % 4 * 4], 4);
+    const std::array<byte_t, 0x10>& tileGfx = tileGfxs[i_tileGfx];
+    for (index_t y{}; y < 8; ++y)
+        for (index_t x{}; x < 8; ++x)
+        {
+            const index_t y_pixel = !isFlipped_y ? y : 7 - y;
+            const index_t x_pixel = !isFlipped_x ? x : 7 - x;
+
+            // Bitplane decoding
+            index_t i_colour{};
+            for (index_t i{}; i < 2; ++i)
+                i_colour |= (tileGfx[y * 2 + i] >> 7 - x & 1) << i;
+
+            uint16_t colour = palette[i_colour] & 0x7FFF;
+            if (i_colour == 0)
+                colour |= 0x8000; // Transparent
+
+            bitmap.data[y_pixel][x_pixel].colour = colour;
+        }
+
+    return bitmap;
+}
+LOG_RETHROW
+
+static TileBitmap draw4bppTile(word_t tilemapEntry, std::span<const Mode1Tileset::tileGfx_t> tileGfxs, std::span<const Mode1Tileset::palette_t, 8> palettes)
+try
+{
+    TileBitmap bitmap;
+            
+    const index_t i_tileGfx = tilemapEntry & 0x3FF;
+    const index_t i_palette = tilemapEntry >> 0xA & 7;
+    const bool hasPriority = tilemapEntry >> 0xD & 1;
+    const bool isFlipped_x = tilemapEntry >> 0xE & 1;
+    const bool isFlipped_y = tilemapEntry >> 0xF;
+
+    bitmap.hasPriority = hasPriority;
+
+    const Mode1Tileset::palette_t& palette = palettes[i_palette];
+    const Mode1Tileset::tileGfx_t& tileGfx = tileGfxs[i_tileGfx];
+    for (index_t y{}; y < 8; ++y)
+        for (index_t x{}; x < 8; ++x)
+        {
+            const index_t y_pixel = !isFlipped_y ? y : 7 - y;
+            const index_t x_pixel = !isFlipped_x ? x : 7 - x;
+
+            // Bitplane decoding
+            index_t i_colour{};
+            for (index_t i{}; i < 2; ++i)
+                for (index_t ii{}; ii < 2; ++ii)
+                    i_colour |= (tileGfx[i * 0x10 + y * 2 + ii] >> 7 - x & 1) << i * 2 + ii;
+
+            uint16_t colour = palette[i_colour] & 0x7FFF;
+            if (i_colour == 0)
+                colour |= 0x8000; // Transparent
+
+            bitmap.data[y_pixel][x_pixel].colour = colour;
+        }
+
+    return bitmap;
+}
+LOG_RETHROW
+
+static metatileBitmaps_t drawMode1Metatile(Mode1Tileset::metatile_t metatile, const Mode1Tileset& tileset)
+try
+{
+    metatileBitmaps_t bitmaps;
+    for (index_t i_y_tile{}; i_y_tile < 2; ++i_y_tile)
+        for (index_t i_x_tile{}; i_x_tile < 2; ++i_x_tile)
+        {
+            const word_t tilemapEntry = metatile[i_y_tile * 2 + i_x_tile];
+            bitmaps[i_y_tile][i_x_tile] = draw4bppTile(tilemapEntry, tileset.tileGfxs, tileset.palettes);
+        }
+
+    return bitmaps;
+}
+LOG_RETHROW
+
+static std::vector<metatileBitmaps_t> drawMode1Tileset(const Mode1Tileset& tileset)
+try
+{
+    const n_t n_metatiles = std::size(tileset.metatiles);
+    std::vector<metatileBitmaps_t> bitmaps;
+    bitmaps.reserve(n_metatiles);
+    for (const Mode1Tileset::metatile_t metatile : tileset.metatiles)
+        bitmaps.push_back(drawMode1Metatile(metatile, tileset));
+
+    return bitmaps;
+}
+LOG_RETHROW
+
+
+struct sm::ZPixel
+{
+    enum Priority
+    {
+        backdrop,
+        bg3_0,
+        sprites_0,
+        sprites_1,
+        bg2_0,
+        bg1_0,
+        sprites_2,
+        bg2_1,
+        bg1_1,
+        sprites_3,
+        bg3_1
+    };
+
+    rom::Abgr16 colour;
+    Priority priority;
+};
+
+static void drawBlock(Array2d<ZPixel>& bitmap, index_t x_block, index_t y_block, word_t block, bool isBackground, const std::vector<metatileBitmaps_t>& tileset)
+try
+{
+    const index_t i_metatile = block & 0x3FF;
+    const bool isBlockFlipped_x = block >> 0xA & 1;
+    const bool isBlockFlipped_y = block >> 0xB & 1;
+            
+    if (i_metatile > std::size(tileset))
+        if (isBackground)
+            throw std::out_of_range(LOG_INFO "Out of bounds background metatile index");
+        else
+            throw std::out_of_range(LOG_INFO "Out of bounds level metatile index");
+            
+    const metatileBitmaps_t& metatile = tileset[i_metatile];
+    for (index_t i_y_tile{}; i_y_tile < 2; ++i_y_tile)
+        for (index_t i_x_tile{}; i_x_tile < 2; ++i_x_tile)
+        {  
+            const index_t
+                i_x_blockTile = !isBlockFlipped_x ? i_x_tile : 1 - i_x_tile,
+                i_y_blockTile = !isBlockFlipped_y ? i_y_tile : 1 - i_y_tile;
+
+            const TileBitmap& tile = metatile[i_y_blockTile][i_x_blockTile];
+            ZPixel::Priority tilePriority;
+            if (isBackground)
+                tilePriority = tile.hasPriority ? ZPixel::bg2_1 : ZPixel::bg2_0;
+            else
+                tilePriority = tile.hasPriority ? ZPixel::bg1_1 : ZPixel::bg1_0;
+            
+            for (index_t y{}; y < 8; ++y)
+                for (index_t x{}; x < 8; ++x)
+                {
+                    const index_t
+                        y_dest = y_block * 0x10 + i_y_tile * 8 + y,
+                        x_dest = x_block * 0x10 + i_x_tile * 8 + x,
+                        y_src = !isBlockFlipped_y ? y : 7 - y,
+                        x_src = !isBlockFlipped_x ? x : 7 - x;
+                        
+                    const rom::Abgr16 tileColour = tile.data[y_src][x_src];
+                    if (tileColour.colour & 0x8000)
+                        continue;
+
+                    ZPixel& bitmapPixel = bitmap[y_dest][x_dest];
+                    bitmapPixel.colour = tileColour;
+                    bitmapPixel.priority = tilePriority;
+                }
+    }
+}
+LOG_RETHROW
+
+static Array2d<ZPixel> drawRoomBlocks(
+    n_t n_y_blocks, n_t n_x_blocks, const std::vector<metatileBitmaps_t>& tileset, std::span<const word_t> blocks, bool isBackground
+)
+try
+{
+    Array2d<ZPixel> bitmap({.n_y = n_y_blocks * 0x10, .n_x = n_x_blocks * 0x10});
+    std::fill_n(std::data(bitmap), std::size(bitmap), ZPixel{0x8000});
+    if (blocks.empty())
+        return bitmap;
+
+    for (index_t y_block{}; y_block < n_y_blocks; ++y_block)
+        for (index_t x_block{}; x_block < n_x_blocks; ++x_block)
+        {
+            const word_t block = blocks[y_block * n_x_blocks + x_block];
+            drawBlock(bitmap, x_block, y_block, block, isBackground, tileset);
+        }
+
+    return bitmap;
+}
+LOG_RETHROW
+
+Array2d<ZPixel> Sm::drawRoomFx(
+    const FxHeaderEntry* p_fx, n_t n_y_tiles, n_t n_x_tiles, std::span<const std::array<word_t, 0x10>, 8> palettes
+) const
+try
+{
+    using tileGfx_t = std::array<byte_t, 0x10>;
+
+    Array2d<ZPixel> bitmap({.n_y = n_y_tiles * 8, .n_x = n_x_tiles * 8});
+    std::fill_n(std::data(bitmap), std::size(bitmap), ZPixel{{palettes[1][0xB]}, ZPixel::bg3_0});
+
+    if (!p_fx)
+        return bitmap;
+
+    const bool isLiquid = std::ranges::contains(std::array{2, 4, 6, 0x26}, p_fx->type);
+    if (isLiquid && p_fx->baseYPosition & 0x8000)
+        return bitmap;
+
+    DataReader reader(rom);
+    const word_t tilemapAddressWord = reader.peekInt<2>(SnesAddress(0x83'ABF0 + p_fx->type));
+    if (!tilemapAddressWord)
+        return bitmap;
+
+    reader.seek(0x9A'B200_sm); // Standard BG3 tiles
+    std::array<tileGfx_t, 0x100> tileGfxs;
+    for (tileGfx_t& tileGfx : tileGfxs)
+        tileGfx = reader.readInts<1, 0x10>();
+
+    SnesAddress animatedTilesAddress{};
+    switch (p_fx->type)
+    {
+    case 2: // Lava
+        animatedTilesAddress = 0x87'82AB_sm;
+        break;
+
+    case 4: // Acid
+        animatedTilesAddress = 0x87'82C9_sm;
+        break;
+
+    case 8: // Spores
+        animatedTilesAddress = 0x87'82FD_sm;
+        break;
+
+    case 0xA: // Rain
+        animatedTilesAddress = 0x87'82E7_sm;
+        break;
+    }
+
+    if (animatedTilesAddress)
+    {
+        reader.seek(animatedTilesAddress);
+        AnimatedTilesHeader animatedTiles(reader);
+        if (animatedTiles.vramAddress >= 0x4800)
+            throw std::runtime_error(LOG_INFO + std::format("Invalid animated tiles VRAM address ${:X}", animatedTiles.vramAddress));
+
+        if (animatedTiles.vramAddress >= 0x4000)
+        {
+            reader.seek(SnesAddress(0x87'0000 | animatedTiles.instructionListAddress));
+            if (reader.readInt<2>() & 0x8000)
+                throw std::runtime_error(LOG_INFO "Unsupported animated tiles instruction list");
+
+            const word_t gfxAddress = reader.readInt<2>();
+            if (gfxAddress < 0x8000)
+                throw std::runtime_error(LOG_INFO "Invalid animated tiles special instruction");
+
+            reader.seek(SnesAddress(0x87'0000 | gfxAddress));
+            const index_t i_tileGfx = (animatedTiles.vramAddress - 0x4000) / 8;
+            for (tileGfx_t& tileGfx : std::span(&tileGfxs[i_tileGfx], animatedTiles.size))
+                tileGfx = reader.readInts<1, 0x10>();
+        }
+    }
+
+
+    const index_t baseYPosition = isLiquid ? p_fx->baseYPosition : 0;
+    const SnesAddress tilemapAddress(0x8A'0000 | tilemapAddressWord);
+    reader.seek(tilemapAddress);
+
+    for (index_t y_tile{}; y_tile < 0x21; ++y_tile)
+        for (index_t x_tile{}; x_tile < 0x20; ++x_tile)
+        {
+            index_t y_dest = baseYPosition + y_tile * 8;
+            if (y_dest >= bitmap.getSizes().n_y)
+                return bitmap;
+
+            const word_t tilemapEntry = reader.readInt<2>();
+            const TileBitmap tileBitmap = draw2bppTile(tilemapEntry, tileGfxs, palettes.subspan<0, 2>());
+            const ZPixel::Priority tilePriority = tileBitmap.hasPriority ? ZPixel::bg3_1 : ZPixel::bg3_0;
+
+            const n_t n_y = std::min<n_t>(8, bitmap.getSizes().n_y - y_dest);
+            for (index_t y_src{}; y_src < n_y; ++y_src, ++y_dest)
+                for (index_t x_repeat{}; x_repeat * 0x20 + x_tile < n_x_tiles; ++x_repeat)
+                    for (index_t x_src{}; x_src < 8; ++x_src)
+                    {
+                        const rom::Abgr16 tileColour = tileBitmap.data[y_src][x_src];
+                        if (tileColour.colour & 0x8000)
+                            continue;
+
+                        const index_t x_dest = (x_repeat * 0x20 + x_tile) * 8 + x_src;
+                        ZPixel& bitmapPixel = bitmap[y_dest][x_dest];
+                        bitmapPixel.colour = tileColour;
+                        bitmapPixel.priority = tilePriority;
+                    }
+        }
+
+    // Ran out of FX tilemap to draw...
+    // Lets just repeat the last 4 rows
+    const index_t y_padding = baseYPosition + 0x21 * 8;
+    for (index_t y_bitmap = y_padding; y_bitmap < bitmap.getSizes().n_y; ++y_bitmap)
+        std::ranges::copy(bitmap[y_padding - 0x20 + (y_bitmap - y_padding) % 0x20], std::begin(bitmap[y_bitmap]));
+
+    return bitmap;
+
+}
+LOG_RETHROW
+
+static void addBitmap(Array2d<ZPixel>& destBitmap, const Array2d<ZPixel>& srcBitmap)
+{
+    const array2d::Sizes sizes = destBitmap.getSizes();
+    for (index_t y{}; y < sizes.n_y; ++y)
+        for (index_t x{}; x < sizes.n_x; ++x)
+        {
+            const ZPixel srcPixel = srcBitmap[y][x];
+            const rom::Abgr16 srcColour = srcPixel.colour;
+            if (srcColour.colour & 0x8000)
+                continue;
+
+            ZPixel& destPixel = destBitmap[y][x];
+            rom::Abgr16& destColour = destPixel.colour;
+            if (destColour.colour & 0x8000 || srcPixel.priority > destPixel.priority)
+                destPixel = srcPixel;
+        }
+}
+
+static void colourMathAdd(
+    Array2d<ZPixel>& mainScreen, const Array2d<ZPixel>& subScreen, 
+    word_t mainScreenBackdrop, word_t subScreenBackdrop = 0
+)
+{
+    const array2d::Sizes sizes = mainScreen.getSizes();
+    for (index_t y{}; y < sizes.n_y; ++y)
+        for (index_t x{}; x < sizes.n_x; ++x)
+        {
+            rom::Abgr16& mainColour = mainScreen[y][x].colour;
+            const rom::Abgr16 subColour = subScreen[y][x].colour;
+            word_t mainColourValue = mainColour.colour;
+            if (mainColourValue & 0x8000)
+                mainColourValue = mainScreenBackdrop;
+            
+            word_t subColourValue = subColour.colour;
+            if (subColourValue & 0x8000)
+                subColourValue = subScreenBackdrop;
+
+            const unsigned
+                red   = std::min<unsigned>(0x1F, (mainColourValue      & 0x1F) + (subColourValue        & 0x1F)),
+                green = std::min<unsigned>(0x1F, (mainColourValue >> 5 & 0x1F) + (subColourValue >> 5   & 0x1F)),
+                blue  = std::min<unsigned>(0x1F, (mainColourValue >> 0xA)      + (subColourValue >> 0xA));
+
+            mainColour.colour = red | green << 5 | blue << 0xA;
+        }
+}
+
+static void colourMathSubtract(
+    Array2d<ZPixel>& mainScreen, const Array2d<ZPixel>& subScreen, 
+    word_t mainScreenBackdrop, word_t subScreenBackdrop = 0
+)
+{
+    const array2d::Sizes sizes = mainScreen.getSizes();
+    for (index_t y{}; y < sizes.n_y; ++y)
+        for (index_t x{}; x < sizes.n_x; ++x)
+        {
+            rom::Abgr16& mainColour = mainScreen[y][x].colour;
+            const rom::Abgr16 subColour = subScreen[y][x].colour;
+            word_t mainColourValue = mainColour.colour;
+            if (mainColourValue & 0x8000)
+                mainColourValue = mainScreenBackdrop;
+            
+            word_t subColourValue = subColour.colour;
+            if (subColourValue & 0x8000)
+                subColourValue = subScreenBackdrop;
+
+            const unsigned
+                red   = std::max(0, signed(mainColourValue      & 0x1F) - signed(subColourValue        & 0x1F)),
+                green = std::max(0, signed(mainColourValue >> 5 & 0x1F) - signed(subColourValue >> 5   & 0x1F)),
+                blue  = std::max(0, signed(mainColourValue >> 0xA)      - signed(subColourValue >> 0xA));
+
+            mainColour.colour = red | green << 5 | blue << 0xA;
+        }
+}
+
+static Array2d<rom::Abgr16> stripPriority(const Array2d<ZPixel>& bitmap)
+try
+{
+    const array2d::Sizes sizes = bitmap.getSizes();
+    Array2d<rom::Abgr16> stripped(sizes);
+    for (index_t y{}; y < sizes.n_y; ++y)
+        for (index_t x{}; x < sizes.n_x; ++x)
+            stripped[y][x] = bitmap[y][x].colour;
+
+    return stripped;
+}
+LOG_RETHROW
+
+static Array2d<rom::Abgr16> blendLayers(
+    Array2d<ZPixel> bg1Bitmap, Array2d<ZPixel> bg2Bitmap, Array2d<ZPixel> bg3Bitmap, 
+    const FxHeaderEntry* p_fxEntry, word_t mainScreenBackdrop
+)
+try
+{
+    byte_t layerBlend = 0;
+    if (p_fxEntry)
+    {
+        if (std::ranges::contains(std::array{2, 4, 6, 8, 0xA, 0xC, 0x26}, p_fxEntry->type))
+            layerBlend = p_fxEntry->fxLayer3LayerBlend;
+        else
+            layerBlend = p_fxEntry->defaultLayerBlend;
+    }
+    
+    switch (layerBlend)
+    {
+    default:
+        throw std::runtime_error(LOG_INFO + std::format("Unknown layer blend {:X}h", layerBlend));
+
+    // Normal
+    case 0:
+    case 2:
+    case 0xE:
+    case 0x20:
+    {
+        // BG3 blended onto BG1/BG2/sprites
+
+        addBitmap(bg1Bitmap, bg2Bitmap);
+        // add sprites to bg1Bitmap
+        colourMathAdd(bg1Bitmap, bg3Bitmap, mainScreenBackdrop);
+        return stripPriority(bg1Bitmap);
+    }
+        
+
+    // Coven (low priority sprites are semi-transparent on BG2)
+    case 8:
+    {
+        // BG3/sprites blended onto BG2, BG1/sprites
+
+        // add sprites to bg3Bitmap
+        colourMathAdd(bg2Bitmap, bg3Bitmap, mainScreenBackdrop);
+        addBitmap(bg2Bitmap, bg1Bitmap);
+        // add sprites to bg2Bitmap
+        return stripPriority(bg2Bitmap);
+    }
+
+    // Spores (BG3 hidden by BG1)
+    case 0xA:
+    {
+        // BG3 blended onto BG2/sprites, BG1
+
+        // add sprites to bg2Bitmap
+        colourMathAdd(bg2Bitmap, bg3Bitmap, mainScreenBackdrop);
+        addBitmap(bg2Bitmap, bg1Bitmap);
+        return stripPriority(bg2Bitmap);
+    }
+
+    // Water - dimmed by BG3
+    case 0x14:
+    case 0x22:
+    {
+        // BG3 inverse blended onto BG1/BG2/sprites
+
+        addBitmap(bg1Bitmap, bg2Bitmap);
+        // add sprites to bg1Bitmap
+        colourMathSubtract(bg1Bitmap, bg3Bitmap, mainScreenBackdrop);
+        return stripPriority(bg1Bitmap);
+    }
+
+    // Water - background waterfalls (dimmed by BG2/BG3)
+    case 0x16:
+    {
+        // BG2/BG3 inverse blended onto BG1/sprites
+        
+        // add sprites to bg1Bitmap
+        addBitmap(bg2Bitmap, bg3Bitmap);
+        colourMathSubtract(bg1Bitmap, bg2Bitmap, mainScreenBackdrop);
+        return stripPriority(bg1Bitmap);
+    }
+
+    // Colour math affects all sprite palettes (semi-transparent BG1/BG2/sprites on BG3)
+    case 0x18:
+    case 0x1E:
+    case 0x30:
+    {
+        // BG1/BG2/sprites blended onto BG3
+
+        addBitmap(bg1Bitmap, bg2Bitmap);
+        // add sprites to bg1Bitmap
+        colourMathAdd(bg3Bitmap, bg1Bitmap, mainScreenBackdrop);
+        return stripPriority(bg3Bitmap);
+    }
+
+    // Red desaturation (BG3 disabled, dimmed by red subscreen backdrop)
+    case 0x28:
+    {
+        // Red colour inverse blended onto BG1/BG2/sprites
+
+        addBitmap(bg1Bitmap, bg2Bitmap);
+        // add sprites to bg1Bitmap
+        return stripPriority(bg1Bitmap);
+    }
+
+    // Orange desaturation (BG3 disabled, dimmed by orange subscreen backdrop)
+    case 0x2A:
+    {
+        // Orange colour inverse blended onto BG1/BG2/sprites
+
+        addBitmap(bg1Bitmap, bg2Bitmap);
+        // add sprites to bg1Bitmap
+        return stripPriority(bg1Bitmap);
+    }
+    }
+}
+LOG_RETHROW
 
 Array2d<rom::Abgr16> Sm::drawRoom(rom::Address address) const
 try
@@ -340,79 +917,34 @@ try
     reader.seek(SnesAddress(stateHeader.levelDataAddress));
     const LevelData levelData(reader);
 
+    reader.seek(SnesAddress(0x83'0000 | stateHeader.fxAddress));
+    const FxHeader fxHeader(reader);
+    const FxHeaderEntry* p_fxEntry{};
+    if (!fxHeader.entries.empty())
+        p_fxEntry = &fxHeader.entries.back();
+
     const bool isExtraLarge = roomHeader.creBitset & 4;
     const bool isCeres = roomHeader.areaIndex == 6;
-    const std::vector<metatileBitmaps_t> tileset = drawMode1Tileset(stateHeader.tilesetIndex, isExtraLarge, isCeres);
+    Mode1Tileset tileset = makeMode1Tileset(stateHeader.tilesetIndex, isExtraLarge, isCeres);
+    if (p_fxEntry && p_fxEntry->paletteBlend)
+        std::ranges::copy(reader.peekInts<2, 3>(SnesAddress(0x89'AA02 + p_fxEntry->paletteBlend)), &tileset.palettes[1][9]);
 
-    Array2d<rom::Abgr16> bitmap({.n_y = roomHeader.height * 0x100u, .n_x = roomHeader.width * 0x100u});
-    std::fill_n(std::data(bitmap), std::size(bitmap), rom::Abgr16{0x8000});
+    const std::vector<metatileBitmaps_t> metatileBitmaps = drawMode1Tileset(tileset);
+    // todo: load BG1/2 animated tiles
 
-    const n_t n_y_blocks = roomHeader.height * 0x10, n_x_blocks = roomHeader.width * 0x10;
-    for (index_t y_block{}; y_block < n_y_blocks; ++y_block)
-        for (index_t x_block{}; x_block < n_x_blocks; ++x_block)
-        {
-            const bool hasBackground = !levelData.background.empty();
-            const index_t i_block = y_block * n_x_blocks + x_block;
-            const word_t levelBlock = levelData.level[i_block];
-            const word_t backgroundBlock = !hasBackground ? 0 : levelData.background[i_block];
-            
-            const index_t i_levelMetatile = levelBlock & 0x3FF;
-            const index_t i_backgroundMetatile = backgroundBlock & 0x3FF;
-            const bool isLevelBlockFlipped_x = levelBlock >> 0xA & 1;
-            const bool isLevelBlockFlipped_y = levelBlock >> 0xB & 1;
-            const bool isBackgroundBlockFlipped_x = backgroundBlock >> 0xA & 1;
-            const bool isBackgroundBlockFlipped_y = backgroundBlock >> 0xB & 1;
-            
-            if (i_levelMetatile > std::size(tileset))
-                throw std::out_of_range(LOG_INFO "Out of bounds level metatile index");
-            
-            if (i_backgroundMetatile > std::size(tileset))
-                throw std::out_of_range(LOG_INFO "Out of bounds background metatile index");
-            
-            for (index_t i_y_tile{}; i_y_tile < 2; ++i_y_tile)
-                for (index_t i_x_tile{}; i_x_tile < 2; ++i_x_tile)
-                {
-                    auto drawTile = [&](const MetatileBitmap& metatile, bool isBlockFlipped_x, bool isBlockFlipped_y)
-                    {
-                        for (index_t y{}; y < 8; ++y)
-                            for (index_t x{}; x < 8; ++x)
-                            {
-                                index_t
-                                    y_bitmap = y_block * 0x10 + i_y_tile * 8,
-                                    x_bitmap = x_block * 0x10 + i_x_tile * 8;
+    const n_t
+        n_y_blocks = roomHeader.height * 0x10, 
+        n_x_blocks = roomHeader.width * 0x10;
 
-                                y_bitmap += !isBlockFlipped_y ? y : 7 - y;
-                                x_bitmap += !isBlockFlipped_x ? x : 7 - x;
+    std::span<const word_t> level(levelData.level), background(levelData.background);
+    Array2d<ZPixel>
+        bg1Bitmap = drawRoomBlocks(n_y_blocks, n_x_blocks, metatileBitmaps, level, false),
+        bg2Bitmap = drawRoomBlocks(n_y_blocks, n_x_blocks, metatileBitmaps, background, true),
+        bg3Bitmap = drawRoomFx(p_fxEntry, n_y_blocks * 2, n_x_blocks * 2, tileset.palettes);
+    
+    const word_t mainScreenBackdrop = tileset.palettes[0][0];
 
-                                if (!(metatile.data[y][x].colour & 0x8000) || bitmap[y_bitmap][x_bitmap].colour & 0x8000)
-                                    bitmap[y_bitmap][x_bitmap] = metatile.data[y][x];
-                            }
-                    };
-                    
-                    const index_t
-                        i_x_levelTile = !isLevelBlockFlipped_x ? i_x_tile : 1 - i_x_tile,
-                        i_y_levelTile = !isLevelBlockFlipped_y ? i_y_tile : 1 - i_y_tile,
-                        i_x_backgroundTile = !isBackgroundBlockFlipped_x ? i_x_tile : 1 - i_x_tile,
-                        i_y_backgroundTile = !isBackgroundBlockFlipped_y ? i_y_tile : 1 - i_y_tile;
-
-                    const MetatileBitmap& levelMetatile = tileset[i_levelMetatile][i_y_levelTile][i_x_levelTile];
-                    const MetatileBitmap& backgroundMetatile = tileset[i_backgroundMetatile][i_y_backgroundTile][i_x_backgroundTile];
-
-                    // drawTile(y_block * n_x_blocks + x_block & 0x3FF)
-                    if (hasBackground && backgroundMetatile.hasPriority && !levelMetatile.hasPriority)
-                    {
-                        drawTile(levelMetatile, isLevelBlockFlipped_x, isLevelBlockFlipped_y);
-                        drawTile(backgroundMetatile, isBackgroundBlockFlipped_x, isBackgroundBlockFlipped_y);
-                    }
-                    else
-                    {
-                        drawTile(backgroundMetatile, isBackgroundBlockFlipped_x, isBackgroundBlockFlipped_y);
-                        drawTile(levelMetatile, isLevelBlockFlipped_x, isLevelBlockFlipped_y);
-                    }
-            }
-        }
-
-    return bitmap;
+    return blendLayers(std::move(bg1Bitmap), std::move(bg2Bitmap), std::move(bg3Bitmap), p_fxEntry, mainScreenBackdrop);
 }
 LOG_RETHROW
 
@@ -475,28 +1007,6 @@ try
     stateHeaders[stateAddress] = std::move(stateHeader);
 }
 LOG_RETHROW
-
-struct sm::Mode1Tileset
-{
-    using metatile_t = std::array<word_t, 4>; // Tilemap entries for 4 tiles: up-left, up-right, down-left, down-right
-    using tileGfx_t = std::array<byte_t, 0x20>; // 4bpp planar
-    using palette_t = std::array<word_t, 0x10>; // 15-bit BGR (with unused MSb)
-
-    std::array<metatile_t, 0x400> metatiles;
-    std::array<tileGfx_t, 0x400> tileGfxs;
-    std::array<palette_t, 8> palettes;
-};
-
-struct sm::Mode7Tileset // Possibly too large for stack allocation
-{
-    using metatile_t = std::array<word_t, 4>;
-    using tileGfx_t = std::array<byte_t, 0x40>;
-    using palette_t = std::array<word_t, 0x80>;
-
-    std::array<metatile_t, 0x400> metatiles; // Always 2000h bytes
-    std::array<tileGfx_t, 0x200> tileGfxs; // Always 8000h bytes
-    palette_t palette; // Always 100h bytes
-};
 
 Mode1Tileset Sm::makeMode1Tileset(index_t i_tileset, bool isExtraLarge, bool isCeres) const
 try
@@ -577,66 +1087,5 @@ try
     }
 
     return tileset;
-}
-LOG_RETHROW
-
-static metatileBitmaps_t drawMode1Metatile(Mode1Tileset::metatile_t metatile, const Mode1Tileset& tileset)
-try
-{
-    metatileBitmaps_t bitmaps;
-    for (index_t i_y_tile{}; i_y_tile < 2; ++i_y_tile)
-        for (index_t i_x_tile{}; i_x_tile < 2; ++i_x_tile)
-        {
-            MetatileBitmap& bitmap = bitmaps[i_y_tile][i_x_tile];
-            const word_t tilemapEntry = metatile[i_y_tile * 2 + i_x_tile];
-            
-            const index_t i_tileGfx = tilemapEntry & 0x3FF;
-            const index_t i_palette = tilemapEntry >> 0xA & 7;
-            const bool hasPriority = tilemapEntry >> 0xD & 1;
-            const bool isFlipped_x = tilemapEntry >> 0xE & 1;
-            const bool isFlipped_y = tilemapEntry >> 0xF;
-
-            const Mode1Tileset::palette_t& palette = tileset.palettes[i_palette];
-            if (i_tileGfx > std::size(tileset.tileGfxs))
-                throw std::out_of_range(LOG_INFO "Out of bounds tile GFX index");
-
-            bitmap.hasPriority = hasPriority;
-
-            const Mode1Tileset::tileGfx_t& tileGfx = tileset.tileGfxs[i_tileGfx];
-            for (index_t y{}; y < 8; ++y)
-                for (index_t x{}; x < 8; ++x)
-                {
-                    const index_t y_pixel = !isFlipped_y ? y : 7 - y;
-                    const index_t x_pixel = !isFlipped_x ? x : 7 - x;
-
-                    // Bitplane decoding
-                    index_t i_colour{};
-                    for (index_t i{}; i < 2; ++i)
-                        for (index_t ii{}; ii < 2; ++ii)
-                            i_colour |= (tileGfx[i * 0x10 + y * 2 + ii] >> 7 - x & 1) << i * 2 + ii;
-
-                    uint16_t colour = palette[i_colour] & 0x7FFF;
-                    if (i_colour == 0)
-                        colour |= 0x8000; // Transparent
-
-                    bitmap.data[y_pixel][x_pixel].colour = colour;
-                }
-        }
-
-    return bitmaps;
-}
-LOG_RETHROW
-
-std::vector<metatileBitmaps_t> Sm::drawMode1Tileset(index_t i_tileset, bool isExtraLarge, bool isCeres) const
-try
-{
-    const Mode1Tileset tileset = makeMode1Tileset(i_tileset, isExtraLarge, isCeres);
-    const n_t n_metatiles = std::size(tileset.metatiles);
-    std::vector<metatileBitmaps_t> bitmaps;
-    bitmaps.reserve(n_metatiles);
-    for (const Mode1Tileset::metatile_t metatile : tileset.metatiles)
-        bitmaps.push_back(drawMode1Metatile(metatile, tileset));
-
-    return bitmaps;
 }
 LOG_RETHROW

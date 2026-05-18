@@ -13,6 +13,11 @@ std::span<const uint8_t> DataReader::peekBytes(data_reader::Address address, n_t
     return data.subspan(address, n_bytes);
 }
 
+std::span<const uint8_t> DataReader::peekBytes(n_t n_bytes) const
+{
+    return peekBytes({address}, n_bytes);
+}
+
 std::span<const uint8_t> DataReader::readBytes(n_t n_bytes)
 {
     std::span<const uint8_t> ret = peekBytes(Address(address), n_bytes);

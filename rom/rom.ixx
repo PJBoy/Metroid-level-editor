@@ -18,7 +18,7 @@ struct Bgr15
 
 struct Abgr16 // 1-bit alpha
 {
-    uint16_t colour;
+    uint16_t colour; // MSb = 1 for transparent
 };
 }
 

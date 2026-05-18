@@ -47,7 +47,10 @@ try
     p_renderer = rendererFactory.makeWindowRenderer(*this, *p_os);
 
     // Temporary
-    const Array2d<rom::Abgr16> romBitmap = p_rom->drawRoom({0x7'D78F});
+    //Array2d<rom::Abgr16> romBitmap = p_rom->drawRoom({0x7'D78F}); // Pre-Draygon room
+    Array2d<rom::Abgr16> romBitmap = p_rom->drawRoom({0x7'AF14}); // Lava dive room
+    //Array2d<rom::Abgr16> romBitmap = p_rom->drawRoom({0x7'9D19}); // Charge beam room
+    
     p_bitmap = toRendererBitmap(romBitmap, *p_renderer);
 }
 LOG_RETHROW
